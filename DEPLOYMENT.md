@@ -1,6 +1,6 @@
-# Deployment Guide for DocuMorph
+# Deployment Guide for Aitpoint
 
-This guide explains how to host DocuMorph on your own server.
+This guide explains how to host Aitpoint on your own server.
 
 ## Prerequisites
 

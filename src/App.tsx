@@ -31,7 +31,8 @@ import {
   PenTool,
   Send,
   User as UserIcon,
-  Bot as BotIcon
+  Bot as BotIcon,
+  Search
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Routes, Route, Link, useLocation, useParams, useNavigate } from "react-router-dom";
@@ -133,7 +134,7 @@ interface FileState {
   resultUrl?: string;
 }
 
-type AiToolId = "train-status" | "video-gen" | "image-gen" | "content-gen" | "translator";
+type AiToolId = "train-status" | "video-gen" | "image-gen" | "content-gen" | "translator" | "search-gpt";
 
 interface AiTool {
   id: AiToolId;
@@ -184,6 +185,14 @@ const AI_TOOLS: AiTool[] = [
     icon: Train,
     color: "bg-red-500",
     prompt: "What is the current status of train number..."
+  },
+  {
+    id: "search-gpt",
+    label: "Search GPT",
+    description: "AI-powered web search with real-time info",
+    icon: Search,
+    color: "bg-cyan-500",
+    prompt: "Search for anything on the web..."
   }
 ];
 
@@ -360,8 +369,9 @@ export default function App() {
     setUrlInput("");
   };
 
-  const handleAiAction = async (toolId: AiToolId) => {
-    if (!aiInput.trim()) return;
+  const handleAiAction = async (toolId: AiToolId, overrideInput?: string) => {
+    const input = overrideInput || aiInput;
+    if (!input.trim()) return;
 
     setIsAiLoading(true);
     setAiOutput(null);
@@ -372,7 +382,7 @@ export default function App() {
       if (toolId === "image-gen") {
         const response = await ai.models.generateContent({
           model: 'gemini-2.5-flash-image',
-          contents: { parts: [{ text: aiInput }] },
+          contents: { parts: [{ text: input }] },
         });
         
         for (const part of response.candidates?.[0]?.content?.parts || []) {
@@ -391,7 +401,7 @@ export default function App() {
 
         const operation = await ai.models.generateVideos({
           model: 'veo-3.1-lite-generate-preview',
-          prompt: aiInput,
+          prompt: input,
           config: {
             numberOfVideos: 1,
             resolution: '720p',
@@ -413,10 +423,12 @@ export default function App() {
           const blob = await videoResponse.blob();
           setAiOutput({ type: "video", data: URL.createObjectURL(blob) });
         }
-      } else if (toolId === "train-status") {
+      } else if (toolId === "train-status" || toolId === "search-gpt") {
         const response = await ai.models.generateContent({
           model: "gemini-3-flash-preview",
-          contents: `Find the current real-time status of train: ${aiInput}. Provide details like current station, delay, and expected arrival.`,
+          contents: toolId === "train-status" 
+            ? `Find the current real-time status of train: ${input}. Provide details like current station, delay, and expected arrival.`
+            : input,
           config: {
             tools: [{ googleSearch: {} }],
           },
@@ -430,7 +442,7 @@ export default function App() {
 
         const response = await ai.models.generateContent({
           model: "gemini-3-flash-preview",
-          contents: aiInput,
+          contents: input,
           config: { systemInstruction: systemPrompt }
         });
         setAiOutput({ type: "text", data: response.text });
@@ -457,9 +469,9 @@ export default function App() {
               className="flex items-center gap-2 text-red-600 font-bold text-xl"
             >
               <div className="w-8 h-8 bg-red-600 rounded-lg flex items-center justify-center text-white">
-                <FileText className="w-5 h-5" />
+                <Bot className="w-5 h-5" />
               </div>
-              DocuMorph
+              Aitpoint
             </Link>
 
             <div className="hidden md:flex items-center gap-1">
@@ -472,6 +484,17 @@ export default function App() {
               >
                 <Home className="w-4 h-4" />
                 Home
+              </Link>
+
+              <Link 
+                to="/ai"
+                className={cn(
+                  "px-4 py-2 rounded-xl text-sm font-bold transition-colors flex items-center gap-2",
+                  activeTab === "ai-agent" ? "bg-red-50 text-red-600" : "text-gray-600 hover:bg-gray-50"
+                )}
+              >
+                <Bot className="w-4 h-4" />
+                AI Agent
               </Link>
 
               <div className="relative">
@@ -520,17 +543,6 @@ export default function App() {
                   )}
                 </AnimatePresence>
               </div>
-
-              <Link 
-                to="/ai"
-                className={cn(
-                  "px-4 py-2 rounded-xl text-sm font-bold transition-colors flex items-center gap-2",
-                  activeTab === "ai-agent" ? "bg-red-50 text-red-600" : "text-gray-600 hover:bg-gray-50"
-                )}
-              >
-                <Bot className="w-4 h-4" />
-                AI Agent
-              </Link>
             </div>
           </div>
 
@@ -571,7 +583,7 @@ export default function App() {
           </Routes>
 
           <footer className="text-center text-gray-400 text-xs pt-8 font-light">
-            <p>© 2026 DocuMorph. All rights reserved.</p>
+            <p>© 2026 Aitpoint. All rights reserved.</p>
           </footer>
         </div>
       </main>
@@ -580,6 +592,16 @@ export default function App() {
 }
 
 function HomeView({ setConversionType, setFileState }: { setConversionType: (t: ConversionType) => void, setFileState: (s: FileState | null) => void }) {
+  const navigate = useNavigate();
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      navigate(`/ai/search-gpt?q=${encodeURIComponent(searchQuery)}`);
+    }
+  };
+
   return (
     <>
       <header className="text-center space-y-2">
@@ -588,33 +610,66 @@ function HomeView({ setConversionType, setFileState }: { setConversionType: (t: 
           animate={{ scale: 1, opacity: 1 }}
           className="inline-flex items-center justify-center w-16 h-16 rounded-3xl bg-red-600 text-white mb-4 shadow-xl"
         >
-          <FileText className="w-8 h-8" />
+          <Bot className="w-8 h-8" />
         </motion.div>
-        <h1 className="text-4xl font-bold tracking-tight text-gray-900">DocuMorph</h1>
-        <p className="text-gray-500 font-medium">Every tool you need to work with PDFs in one place</p>
+        <h1 className="text-4xl font-bold tracking-tight text-gray-900">Aitpoint</h1>
+        <p className="text-gray-500 font-medium">Your universal AI-powered assistant</p>
       </header>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {CONVERSION_OPTIONS.map((option) => (
+      {/* Custom Search GPT Bar */}
+      <div className="max-w-2xl mx-auto w-full pt-4">
+        <form onSubmit={handleSearch} className="relative group">
+          <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none">
+            <Search className="h-5 w-5 text-gray-400 group-focus-within:text-red-600 transition-colors" />
+          </div>
+          <input
+            type="text"
+            placeholder="Ask Search GPT anything..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="block w-full pl-12 pr-24 py-5 bg-white border-2 border-gray-100 rounded-2xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-red-600 focus:ring-4 focus:ring-red-50 shadow-sm transition-all"
+          />
+          <div className="absolute inset-y-0 right-0 flex items-center pr-2">
+            <Button 
+              type="submit"
+              className="bg-red-600 hover:bg-red-700 text-white rounded-xl px-6 h-11 font-bold shadow-lg"
+            >
+              Search
+            </Button>
+          </div>
+        </form>
+        <div className="flex flex-wrap justify-center gap-2 mt-4">
+          {["Latest news", "Weather today", "Stock market", "AI trends"].map((tag) => (
+            <button
+              key={tag}
+              onClick={() => {
+                setSearchQuery(tag);
+                navigate(`/ai/search-gpt?q=${encodeURIComponent(tag)}`);
+              }}
+              className="px-3 py-1.5 bg-white border border-gray-100 rounded-full text-xs font-bold text-gray-500 hover:bg-red-50 hover:text-red-600 hover:border-red-100 transition-all shadow-sm"
+            >
+              {tag}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pt-8">
+        {AI_TOOLS.map((tool) => (
           <Link
-            key={option.id}
-            to={`/pdf/${option.id}`}
-            onClick={() => {
-              setConversionType(option.id);
-              setFileState(null);
-            }}
-            className={cn(
-              "flex flex-col items-center p-6 rounded-2xl border-none transition-all text-center space-y-4 shadow-sm group bg-white hover:bg-gray-50"
-            )}
+            key={tool.id}
+            to={`/ai/${tool.id}`}
+            className="group relative flex flex-col p-8 rounded-3xl bg-white border border-gray-100 shadow-sm hover:shadow-xl transition-all text-left overflow-hidden"
           >
-            <div className={cn(
-              "p-4 rounded-xl transition-colors bg-gray-100 text-red-600 group-hover:bg-red-50"
-            )}>
-              <option.icon className="w-6 h-6" />
+            <div className={cn("absolute top-0 right-0 w-32 h-32 -mr-8 -mt-8 rounded-full opacity-5 transition-transform group-hover:scale-110", tool.color)} />
+            <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center text-white mb-6 shadow-lg", tool.color)}>
+              <tool.icon className="w-7 h-7" />
             </div>
-            <div>
-              <div className="font-bold text-gray-900 text-sm">{option.label}</div>
-              <div className="text-[10px] text-gray-400 mt-1 leading-tight">{option.description}</div>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">{tool.label}</h3>
+            <p className="text-sm text-gray-500 leading-relaxed">{tool.description}</p>
+            <div className="mt-6 flex items-center text-sm font-bold text-gray-900 group-hover:text-red-600 transition-colors">
+              Try now
+              <ArrowRightLeft className="w-4 h-4 ml-2 rotate-180" />
             </div>
           </Link>
         ))}
@@ -938,7 +993,17 @@ function AiAgentHomeView() {
 
 function AiToolView({ aiInput, setAiInput, aiOutput, setAiOutput, isAiLoading, handleAiAction }: any) {
   const { toolId } = useParams<{ toolId: AiToolId }>();
+  const location = useLocation();
   const tool = AI_TOOLS.find(t => t.id === toolId);
+
+  React.useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const query = params.get("q");
+    if (query && toolId === "search-gpt") {
+      setAiInput(query);
+      handleAiAction("search-gpt", query);
+    }
+  }, [location.search, toolId]);
 
   if (!tool) return <div>Tool not found</div>;
 
