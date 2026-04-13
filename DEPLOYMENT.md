@@ -1,6 +1,6 @@
-# Deployment Guide for Aitpoint
+# Deployment Guide for AiTpoint
 
-This guide explains how to host Aitpoint on your own server.
+This guide explains how to host AiTpoint on your own server.
 
 ## Prerequisites
 

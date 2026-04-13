@@ -504,7 +504,7 @@ export default function App() {
               <div className="w-8 h-8 bg-red-600 rounded-lg flex items-center justify-center text-white">
                 <Bot className="w-5 h-5" />
               </div>
-              Aitpoint
+              AiTpoint
             </Link>
 
             <div className="hidden md:flex items-center gap-1">
@@ -616,7 +616,7 @@ export default function App() {
           </Routes>
 
           <footer className="text-center text-gray-400 text-xs pt-8 font-light">
-            <p>© 2026 Aitpoint. All rights reserved.</p>
+            <p>© 2026 AiTpoint. All rights reserved.</p>
           </footer>
         </div>
       </main>
@@ -645,7 +645,7 @@ function HomeView({ setConversionType, setFileState }: { setConversionType: (t: 
         >
           <Bot className="w-8 h-8" />
         </motion.div>
-        <h1 className="text-4xl font-bold tracking-tight text-gray-900">Aitpoint</h1>
+        <h1 className="text-4xl font-bold tracking-tight text-gray-900">AiTpoint</h1>
         <p className="text-gray-500 font-medium">Your universal AI-powered assistant</p>
       </header>
 
