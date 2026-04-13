@@ -10,9 +10,12 @@ import cors from "cors";
 import PDFDocument from "pdfkit";
 import * as XLSX from "xlsx";
 import { Document, Packer, Paragraph, TextRun } from "docx";
-import { PDFDocument as PDFLib, rgb } from "pdf-lib";
+import { PDFDocument as PDFLib, rgb, degrees } from "pdf-lib";
 import JSZip from "jszip";
 import { createRequire } from "module";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const require = createRequire(import.meta.url);
 const pdfParse = require("pdf-parse");
@@ -138,7 +141,7 @@ async function startServer() {
         const pages = pdf.getPages();
         pages.forEach(page => {
           const currentRotation = page.getRotation().angle;
-          page.setRotation({ angle: (currentRotation + rotation) % 360 } as any);
+          page.setRotation(degrees((currentRotation + rotation) % 360));
         });
         const pdfBytes = await pdf.save();
         res.setHeader("Content-Type", "application/pdf");

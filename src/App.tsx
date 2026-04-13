@@ -157,10 +157,10 @@ const AI_TOOLS: AiTool[] = [
   {
     id: "translator",
     label: "All Lang Translator",
-    description: "Translate any language to English perfectly",
+    description: "Translate between any languages with auto-detection",
     icon: Languages,
     color: "bg-green-500",
-    prompt: "Translate this text to English: "
+    prompt: "Enter text to translate..."
   },
   {
     id: "image-gen",
@@ -196,6 +196,12 @@ const AI_TOOLS: AiTool[] = [
   }
 ];
 
+const SUPPORTED_LANGUAGES = [
+  "English", "Hindi", "Spanish", "French", "German", "Chinese", "Japanese", "Korean", 
+  "Arabic", "Portuguese", "Russian", "Italian", "Dutch", "Turkish", "Bengali", "Marathi", 
+  "Telugu", "Tamil", "Gujarati", "Urdu", "Kannada", "Odia", "Malayalam", "Punjabi"
+];
+
 export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -209,6 +215,8 @@ export default function App() {
   const [urlInput, setUrlInput] = useState("");
   const [rotation, setRotation] = useState(90);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [targetLang, setTargetLang] = useState("English");
+  const [sourceLang, setSourceLang] = useState("Auto-detect");
 
   const activeTab = location.pathname.startsWith("/ai") ? "ai-agent" : "home";
 
@@ -377,7 +385,23 @@ export default function App() {
     setAiOutput(null);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const apiKey = process.env.GEMINI_API_KEY;
+      
+      if (!apiKey || apiKey === "MY_GEMINI_API_KEY") {
+        // If the key is missing or is the placeholder from .env.example
+        if (typeof (window as any).aistudio !== 'undefined') {
+          if (!(await (window as any).aistudio.hasSelectedApiKey())) {
+            toast.info("Please select an API key to use AI features.");
+            await (window as any).aistudio.openSelectKey();
+            setIsAiLoading(false);
+            return;
+          }
+        } else {
+          throw new Error("Gemini API key is missing. Please configure it in the AI Studio Secrets panel.");
+        }
+      }
+
+      const ai = new GoogleGenAI({ apiKey: apiKey || "" });
       
       if (toolId === "image-gen") {
         const response = await ai.models.generateContent({
@@ -425,7 +449,7 @@ export default function App() {
         }
       } else if (toolId === "train-status" || toolId === "search-gpt") {
         const response = await ai.models.generateContent({
-          model: "gemini-3-flash-preview",
+          model: "gemini-3.1-pro-preview",
           contents: toolId === "train-status" 
             ? `Find the current real-time status of train: ${input}. Provide details like current station, delay, and expected arrival.`
             : input,
@@ -437,11 +461,11 @@ export default function App() {
       } else {
         // Content Gen or Translator
         const systemPrompt = toolId === "translator" 
-          ? "You are a professional translator. Translate the following text to English accurately, maintaining tone and context."
+          ? `You are a world-class polyglot and professional translator. Your task is to translate the provided text from ${sourceLang} to ${targetLang}. Maintain the original tone, nuances, and context. Output ONLY the translated text without any explanations.`
           : "You are a creative content generator. Generate high-quality content based on the user's request.";
 
         const response = await ai.models.generateContent({
-          model: "gemini-3-flash-preview",
+          model: "gemini-3.1-pro-preview",
           contents: input,
           config: { systemInstruction: systemPrompt }
         });
@@ -449,7 +473,16 @@ export default function App() {
       }
     } catch (error: any) {
       console.error("AI Error:", error);
-      toast.error(error.message || "AI processing failed");
+      let errorMessage = error.message || "AI processing failed";
+      
+      if (errorMessage.includes("API key not valid") || errorMessage.includes("API_KEY_INVALID")) {
+        errorMessage = "The Gemini API key is invalid. Please check your AI Studio Secrets or select a new key.";
+        if (typeof (window as any).aistudio !== 'undefined') {
+          (window as any).aistudio.openSelectKey();
+        }
+      }
+      
+      toast.error(errorMessage);
     } finally {
       setIsAiLoading(false);
     }
@@ -579,7 +612,7 @@ export default function App() {
             <Route path="/" element={<HomeView setConversionType={setConversionType} setFileState={setFileState} />} />
             <Route path="/pdf/:toolId" element={<PdfToolView conversionType={conversionType} setConversionType={setConversionType} fileState={fileState} setFileState={setFileState} urlInput={urlInput} setUrlInput={setUrlInput} handleConvert={handleConvert} handleFileChange={handleFileChange} handleDrop={handleDrop} rotation={rotation} setRotation={setRotation} reset={reset} />} />
             <Route path="/ai" element={<AiAgentHomeView />} />
-            <Route path="/ai/:toolId" element={<AiToolView aiInput={aiInput} setAiInput={setAiInput} aiOutput={aiOutput} setAiOutput={setAiOutput} isAiLoading={isAiLoading} handleAiAction={handleAiAction} />} />
+            <Route path="/ai/:toolId" element={<AiToolView aiInput={aiInput} setAiInput={setAiInput} aiOutput={aiOutput} setAiOutput={setAiOutput} isAiLoading={isAiLoading} handleAiAction={handleAiAction} sourceLang={sourceLang} setSourceLang={setSourceLang} targetLang={targetLang} setTargetLang={setTargetLang} />} />
           </Routes>
 
           <footer className="text-center text-gray-400 text-xs pt-8 font-light">
@@ -991,7 +1024,18 @@ function AiAgentHomeView() {
   );
 }
 
-function AiToolView({ aiInput, setAiInput, aiOutput, setAiOutput, isAiLoading, handleAiAction }: any) {
+function AiToolView({ 
+  aiInput, 
+  setAiInput, 
+  aiOutput, 
+  setAiOutput, 
+  isAiLoading, 
+  handleAiAction,
+  sourceLang,
+  setSourceLang,
+  targetLang,
+  setTargetLang
+}: any) {
   const { toolId } = useParams<{ toolId: AiToolId }>();
   const location = useLocation();
   const tool = AI_TOOLS.find(t => t.id === toolId);
@@ -1019,18 +1063,41 @@ function AiToolView({ aiInput, setAiInput, aiOutput, setAiOutput, isAiLoading, h
 
       <Card className="border-none shadow-2xl rounded-3xl bg-white overflow-hidden">
         <CardHeader className="bg-gray-50/50 border-b border-gray-100">
-          <div className="flex items-center gap-4">
-            <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center text-white shadow-md", tool.color)}>
-              <tool.icon className="w-6 h-6" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center text-white shadow-md", tool.color)}>
+                <tool.icon className="w-6 h-6" />
+              </div>
+              <div>
+                <CardTitle className="text-xl font-bold">
+                  {tool.label}
+                </CardTitle>
+                <CardDescription>
+                  {tool.description}
+                </CardDescription>
+              </div>
             </div>
-            <div>
-              <CardTitle className="text-xl font-bold">
-                {tool.label}
-              </CardTitle>
-              <CardDescription>
-                {tool.description}
-              </CardDescription>
-            </div>
+
+            {toolId === "translator" && (
+              <div className="flex items-center gap-2">
+                <select 
+                  value={sourceLang}
+                  onChange={(e) => setSourceLang(e.target.value)}
+                  className="bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-red-500"
+                >
+                  <option>Auto-detect</option>
+                  {SUPPORTED_LANGUAGES.map(lang => <option key={lang}>{lang}</option>)}
+                </select>
+                <ArrowRightLeft className="w-4 h-4 text-gray-400" />
+                <select 
+                  value={targetLang}
+                  onChange={(e) => setTargetLang(e.target.value)}
+                  className="bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-red-500"
+                >
+                  {SUPPORTED_LANGUAGES.map(lang => <option key={lang}>{lang}</option>)}
+                </select>
+              </div>
+            )}
           </div>
         </CardHeader>
         <CardContent className="p-8 space-y-8 min-h-[400px]">
