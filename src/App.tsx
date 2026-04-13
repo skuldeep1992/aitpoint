@@ -30,10 +30,11 @@ import {
   Languages,
   PenTool,
   Send,
-  User,
+  User as UserIcon,
   Bot as BotIcon
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { Routes, Route, Link, useLocation, useParams, useNavigate } from "react-router-dom";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -41,6 +42,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { GoogleGenAI } from "@google/genai";
+import { auth, db, googleProvider, signInWithPopup, signOut, onAuthStateChanged, User } from "./firebase";
+import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 
 type ConversionType = 
   | "word-to-pdf" 
@@ -185,8 +188,10 @@ const AI_TOOLS: AiTool[] = [
 ];
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<"home" | "ai-agent">("home");
-  const [activeAiTool, setActiveAiTool] = useState<AiToolId | null>(null);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [user, setUser] = useState<User | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [aiInput, setAiInput] = useState("");
   const [aiOutput, setAiOutput] = useState<any>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -195,6 +200,54 @@ export default function App() {
   const [urlInput, setUrlInput] = useState("");
   const [rotation, setRotation] = useState(90);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  const activeTab = location.pathname.startsWith("/ai") ? "ai-agent" : "home";
+
+  React.useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
+      setIsAuthLoading(false);
+
+      if (currentUser) {
+        // Sync user data to Firestore
+        const userRef = doc(db, "users", currentUser.uid);
+        const userDoc = await getDoc(userRef);
+
+        if (!userDoc.exists()) {
+          await setDoc(userRef, {
+            uid: currentUser.uid,
+            email: currentUser.email,
+            displayName: currentUser.displayName,
+            photoURL: currentUser.photoURL,
+            createdAt: serverTimestamp(),
+            role: "user"
+          });
+        }
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const handleLogin = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+      toast.success("Successfully logged in!");
+    } catch (error: any) {
+      console.error("Login Error:", error);
+      toast.error(error.message || "Failed to login");
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      toast.success("Logged out successfully");
+    } catch (error: any) {
+      console.error("Logout Error:", error);
+      toast.error("Failed to logout");
+    }
+  };
 
   const currentOption = CONVERSION_OPTIONS.find(o => o.id === conversionType)!;
 
@@ -307,17 +360,16 @@ export default function App() {
     setUrlInput("");
   };
 
-  const handleAiAction = async () => {
-    if (!aiInput.trim() || !activeAiTool) return;
+  const handleAiAction = async (toolId: AiToolId) => {
+    if (!aiInput.trim()) return;
 
     setIsAiLoading(true);
     setAiOutput(null);
 
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const tool = AI_TOOLS.find(t => t.id === activeAiTool)!;
-
-      if (activeAiTool === "image-gen") {
+      
+      if (toolId === "image-gen") {
         const response = await ai.models.generateContent({
           model: 'gemini-2.5-flash-image',
           contents: { parts: [{ text: aiInput }] },
@@ -329,7 +381,7 @@ export default function App() {
             break;
           }
         }
-      } else if (activeAiTool === "video-gen") {
+      } else if (toolId === "video-gen") {
         // Check for API key selection for Veo
         if (!(await (window as any).aistudio.hasSelectedApiKey())) {
           await (window as any).aistudio.openSelectKey();
@@ -361,7 +413,7 @@ export default function App() {
           const blob = await videoResponse.blob();
           setAiOutput({ type: "video", data: URL.createObjectURL(blob) });
         }
-      } else if (activeAiTool === "train-status") {
+      } else if (toolId === "train-status") {
         const response = await ai.models.generateContent({
           model: "gemini-3-flash-preview",
           contents: `Find the current real-time status of train: ${aiInput}. Provide details like current station, delay, and expected arrival.`,
@@ -372,7 +424,7 @@ export default function App() {
         setAiOutput({ type: "text", data: response.text });
       } else {
         // Content Gen or Translator
-        const systemPrompt = activeAiTool === "translator" 
+        const systemPrompt = toolId === "translator" 
           ? "You are a professional translator. Translate the following text to English accurately, maintaining tone and context."
           : "You are a creative content generator. Generate high-quality content based on the user's request.";
 
@@ -399,19 +451,20 @@ export default function App() {
       <nav className="sticky top-0 z-50 bg-white border-b border-gray-100 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-8">
-            <button 
-              onClick={() => { setActiveTab("home"); setFileState(null); }}
+            <Link 
+              to="/"
+              onClick={() => { setFileState(null); }}
               className="flex items-center gap-2 text-red-600 font-bold text-xl"
             >
               <div className="w-8 h-8 bg-red-600 rounded-lg flex items-center justify-center text-white">
                 <FileText className="w-5 h-5" />
               </div>
               DocuMorph
-            </button>
+            </Link>
 
             <div className="hidden md:flex items-center gap-1">
-              <button 
-                onClick={() => setActiveTab("home")}
+              <Link 
+                to="/"
                 className={cn(
                   "px-4 py-2 rounded-xl text-sm font-bold transition-colors flex items-center gap-2",
                   activeTab === "home" ? "bg-red-50 text-red-600" : "text-gray-600 hover:bg-gray-50"
@@ -419,7 +472,7 @@ export default function App() {
               >
                 <Home className="w-4 h-4" />
                 Home
-              </button>
+              </Link>
 
               <div className="relative">
                 <button 
@@ -444,11 +497,11 @@ export default function App() {
                       className="absolute top-full left-0 mt-1 w-64 bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 grid grid-cols-1 gap-1"
                     >
                       {CONVERSION_OPTIONS.map((option) => (
-                        <button
+                        <Link
                           key={option.id}
+                          to={`/pdf/${option.id}`}
                           onClick={() => {
                             setConversionType(option.id);
-                            setActiveTab("home");
                             setFileState(null);
                             setIsMenuOpen(false);
                           }}
@@ -461,15 +514,15 @@ export default function App() {
                             <div className="text-xs font-bold text-gray-900">{option.label}</div>
                             <div className="text-[10px] text-gray-400">{option.description}</div>
                           </div>
-                        </button>
+                        </Link>
                       ))}
                     </motion.div>
                   )}
                 </AnimatePresence>
               </div>
 
-              <button 
-                onClick={() => setActiveTab("ai-agent")}
+              <Link 
+                to="/ai"
                 className={cn(
                   "px-4 py-2 rounded-xl text-sm font-bold transition-colors flex items-center gap-2",
                   activeTab === "ai-agent" ? "bg-red-50 text-red-600" : "text-gray-600 hover:bg-gray-50"
@@ -477,456 +530,518 @@ export default function App() {
               >
                 <Bot className="w-4 h-4" />
                 AI Agent
-              </button>
+              </Link>
             </div>
           </div>
 
           <div className="flex items-center gap-4">
-            <Button variant="ghost" className="rounded-xl font-bold text-gray-600">Login</Button>
-            <Button className="rounded-xl bg-red-600 hover:bg-red-700 font-bold shadow-md">Sign Up</Button>
+            {isAuthLoading ? (
+              <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+            ) : user ? (
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  {user.photoURL ? (
+                    <img src={user.photoURL} alt={user.displayName || ""} className="w-8 h-8 rounded-full border border-gray-200" referrerPolicy="no-referrer" />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center text-red-600 font-bold text-xs">
+                      {user.displayName?.charAt(0) || user.email?.charAt(0) || "U"}
+                    </div>
+                  )}
+                  <span className="hidden sm:inline text-sm font-bold text-gray-700">{user.displayName || user.email?.split("@")[0]}</span>
+                </div>
+                <Button variant="ghost" onClick={handleLogout} className="rounded-xl font-bold text-gray-600 hover:text-red-600 hover:bg-red-50">Logout</Button>
+              </div>
+            ) : (
+              <>
+                <Button variant="ghost" onClick={handleLogin} className="rounded-xl font-bold text-gray-600">Login</Button>
+                <Button onClick={handleLogin} className="rounded-xl bg-red-600 hover:bg-red-700 font-bold shadow-md">Sign Up</Button>
+              </>
+            )}
           </div>
         </div>
       </nav>
 
       <main className="flex-1 flex flex-col items-center justify-center p-4 md:p-8">
         <div className="w-full max-w-3xl space-y-8">
-          {activeTab === "home" ? (
-            <>
-              <header className="text-center space-y-2">
-                <motion.div 
-                  initial={{ scale: 0.9, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  className="inline-flex items-center justify-center w-16 h-16 rounded-3xl bg-red-600 text-white mb-4 shadow-xl"
-                >
-                  <FileText className="w-8 h-8" />
-                </motion.div>
-                <h1 className="text-4xl font-bold tracking-tight text-gray-900">DocuMorph</h1>
-                <p className="text-gray-500 font-medium">Every tool you need to work with PDFs in one place</p>
-              </header>
-
-              <AnimatePresence mode="wait">
-                {!fileState ? (
-                  <motion.div
-                    key="selection"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    className="space-y-8"
-                  >
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      {CONVERSION_OPTIONS.map((option) => (
-                        <button
-                          key={option.id}
-                          onClick={() => {
-                            setConversionType(option.id);
-                            setFileState(null);
-                          }}
-                          className={cn(
-                            "flex flex-col items-center p-6 rounded-2xl border-none transition-all text-center space-y-4 shadow-sm group",
-                            conversionType === option.id 
-                              ? "bg-white ring-2 ring-red-600" 
-                              : "bg-white hover:bg-gray-50"
-                          )}
-                        >
-                          <div className={cn(
-                            "p-4 rounded-xl transition-colors",
-                            conversionType === option.id ? "bg-red-600 text-white" : "bg-gray-100 text-red-600 group-hover:bg-red-50"
-                          )}>
-                            <option.icon className="w-6 h-6" />
-                          </div>
-                          <div>
-                            <div className="font-bold text-gray-900 text-sm">{option.label}</div>
-                            <div className="text-[10px] text-gray-400 mt-1 leading-tight">{option.description}</div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-
-                    <Card className="border-none shadow-md bg-white rounded-3xl overflow-hidden">
-                      <CardContent className="pt-12 pb-12">
-                        {conversionType === "url-to-pdf" ? (
-                          <div className="flex flex-col items-center justify-center space-y-8">
-                            <div className="w-24 h-24 rounded-full bg-red-50 flex items-center justify-center text-red-600">
-                              <Globe className="w-12 h-12" />
-                            </div>
-                            <div className="text-center w-full max-w-lg">
-                              <p className="text-xl font-bold text-gray-900 mb-6">
-                                Enter website URL to convert
-                              </p>
-                              <div className="flex gap-3">
-                                <input 
-                                  type="url"
-                                  placeholder="https://example.com"
-                                  value={urlInput}
-                                  onChange={(e) => setUrlInput(e.target.value)}
-                                  className="flex-1 h-14 px-6 rounded-2xl border-2 border-gray-100 focus:outline-none focus:border-red-600 transition-all text-lg"
-                                />
-                                <Button 
-                                  onClick={handleConvert}
-                                  className="h-14 rounded-2xl bg-red-600 hover:bg-red-700 px-8 text-lg font-bold"
-                                >
-                                  Convert
-                                </Button>
-                              </div>
-                            </div>
-                          </div>
-                        ) : (
-                          <div 
-                            onDragOver={(e) => e.preventDefault()}
-                            onDrop={handleDrop}
-                            className="flex flex-col items-center justify-center space-y-8"
-                          >
-                            <div className="w-24 h-24 rounded-full bg-red-50 flex items-center justify-center text-red-600">
-                              <FileUp className="w-12 h-12" />
-                            </div>
-                            <div className="text-center">
-                              <p className="text-2xl font-bold text-gray-900">
-                                {currentOption.multiple ? "Select PDF files" : "Select PDF file"}
-                              </p>
-                              <p className="text-gray-400 mt-2">
-                                or drag and drop here
-                              </p>
-                            </div>
-                            <label className={cn(buttonVariants({ variant: "default" }), "cursor-pointer rounded-2xl h-16 px-12 bg-red-600 hover:bg-red-700 text-lg font-bold shadow-lg transition-all")}>
-                              Select Files
-                              <input 
-                                type="file" 
-                                className="hidden" 
-                                multiple={currentOption.multiple}
-                                accept={currentOption.accept}
-                                onChange={handleFileChange}
-                              />
-                            </label>
-                            {conversionType === "rotate-pdf" && (
-                              <div className="flex items-center gap-4 pt-4">
-                                <span className="text-sm font-medium text-gray-600">Rotation:</span>
-                                {[90, 180, 270].map(deg => (
-                                  <Button 
-                                    key={deg}
-                                    variant={rotation === deg ? "default" : "outline"}
-                                    size="sm"
-                                    onClick={() => setRotation(deg)}
-                                    className="rounded-xl"
-                                  >
-                                    {deg}°
-                                  </Button>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </motion.div>
-                ) : (
-                  <motion.div
-                    key="processing"
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="w-full max-w-2xl mx-auto"
-                  >
-                    <Card className="shadow-2xl border-none rounded-3xl bg-white overflow-hidden">
-                      <CardHeader className="bg-gray-50/50 border-b border-gray-100">
-                        <CardTitle className="flex items-center gap-3 text-xl font-bold">
-                          {fileState.status === "completed" ? (
-                            <CheckCircle2 className="w-6 h-6 text-green-500" />
-                          ) : fileState.status === "error" ? (
-                            <AlertCircle className="w-6 h-6 text-red-500" />
-                          ) : (
-                            <Loader2 className="w-6 h-6 text-red-600 animate-spin" />
-                          )}
-                          {fileState.status === "idle" && "Ready to Process"}
-                          {fileState.status === "uploading" && "Uploading..."}
-                          {fileState.status === "converting" && "Processing..."}
-                          {fileState.status === "completed" && "Task Complete!"}
-                          {fileState.status === "error" && "Error Occurred"}
-                        </CardTitle>
-                        <CardDescription className="font-medium">
-                          {conversionType === "url-to-pdf" ? urlInput : `${fileState.files.length} file(s) selected`}
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="space-y-8 pt-8">
-                        <div className="space-y-4 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
-                          {conversionType === "url-to-pdf" ? (
-                            <div className="flex items-center p-4 bg-gray-50 rounded-2xl border border-gray-100">
-                              <div className="p-3 bg-white rounded-xl shadow-sm mr-4 text-purple-600">
-                                <Globe className="w-6 h-6" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-bold text-gray-900 truncate">{urlInput}</p>
-                                <p className="text-[10px] text-gray-500 uppercase tracking-widest">Website URL</p>
-                              </div>
-                            </div>
-                          ) : (
-                            fileState.files.map((file, i) => (
-                              <div key={i} className="flex items-center p-4 bg-gray-50 rounded-2xl border border-gray-100">
-                                <div className="p-3 bg-white rounded-xl shadow-sm mr-4 text-red-600">
-                                  <FileText className="w-6 h-6" />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-bold text-gray-900 truncate">{file.name}</p>
-                                  <p className="text-[10px] text-gray-500 uppercase tracking-widest">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
-                                </div>
-                                {fileState.status === "idle" && (
-                                  <Button variant="ghost" size="icon" onClick={() => {
-                                    const newFiles = [...fileState.files];
-                                    newFiles.splice(i, 1);
-                                    if (newFiles.length === 0) setFileState(null);
-                                    else setFileState({ ...fileState, files: newFiles });
-                                  }} className="rounded-full hover:bg-red-50 hover:text-red-600">
-                                    <X className="w-4 h-4" />
-                                  </Button>
-                                )}
-                              </div>
-                            ))
-                          )}
-                        </div>
-
-                        {(fileState.status === "uploading" || fileState.status === "converting") && (
-                          <div className="space-y-4">
-                            <div className="flex justify-between text-xs font-bold uppercase tracking-widest text-gray-400">
-                              <span>{fileState.status === "uploading" ? "Uploading" : "Processing"}</span>
-                              <span>{fileState.progress}%</span>
-                            </div>
-                            <Progress value={fileState.progress} className="h-2 bg-gray-100" />
-                          </div>
-                        )}
-
-                        {fileState.status === "error" && (
-                          <div className="p-6 rounded-2xl bg-red-50 border-2 border-red-100 text-red-700 text-sm font-medium">
-                            {fileState.error}
-                          </div>
-                        )}
-
-                        {fileState.status === "completed" && (
-                          <div className="flex flex-col items-center py-6 space-y-4">
-                            <div className="w-24 h-24 rounded-full bg-green-50 flex items-center justify-center text-green-500">
-                              <CheckCircle2 className="w-12 h-12" />
-                            </div>
-                            <div className="text-center">
-                              <p className="text-xl font-bold text-gray-900">Success!</p>
-                              <p className="text-sm text-gray-500 mt-1">Your files have been processed successfully.</p>
-                            </div>
-                          </div>
-                        )}
-                      </CardContent>
-                      <CardFooter className="flex gap-4 p-8 bg-gray-50/50 border-t border-gray-100">
-                        {fileState.status === "idle" && (
-                          <>
-                            <Button variant="outline" className="flex-1 h-14 rounded-2xl border-2 border-gray-200 font-bold" onClick={reset}>Cancel</Button>
-                            <Button className="flex-1 h-14 rounded-2xl bg-red-600 hover:bg-red-700 text-lg font-bold shadow-lg" onClick={handleConvert}>
-                              Process Now
-                            </Button>
-                          </>
-                        )}
-                        {fileState.status === "completed" && (
-                          <>
-                            <Button variant="outline" className="flex-1 h-14 rounded-2xl border-2 border-gray-200 font-bold" onClick={reset}>
-                              <RefreshCw className="w-4 h-4 mr-2" />
-                              Start Over
-                            </Button>
-                            <a 
-                              href={fileState.resultUrl} 
-                              download={
-                                conversionType === "split-pdf" ? "split_pages.zip" :
-                                conversionType === "pdf-to-word" ? "converted.docx" :
-                                "processed.pdf"
-                              }
-                              className={cn(buttonVariants(), "flex-1 h-14 rounded-2xl bg-red-600 hover:bg-red-700 no-underline flex items-center justify-center text-lg font-bold shadow-lg")}
-                            >
-                              <Download className="w-5 h-5 mr-2" />
-                              Download
-                            </a>
-                          </>
-                        )}
-                        {fileState.status === "error" && (
-                          <Button className="w-full h-14 rounded-2xl bg-red-600 hover:bg-red-700 font-bold" onClick={reset}>Try Again</Button>
-                        )}
-                        {(fileState.status === "uploading" || fileState.status === "converting") && (
-                          <Button disabled className="w-full h-14 rounded-2xl bg-gray-100 text-gray-400 cursor-not-allowed font-bold">
-                            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                            Please wait...
-                          </Button>
-                        )}
-                      </CardFooter>
-                    </Card>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              <div className="grid grid-cols-3 gap-8 text-center pt-8">
-                <div className="space-y-2">
-                  <div className="text-gray-900 font-medium">Fast</div>
-                  <div className="text-[10px] text-gray-400 uppercase tracking-widest">Instant Processing</div>
-                </div>
-                <div className="space-y-2">
-                  <div className="text-gray-900 font-medium">Secure</div>
-                  <div className="text-[10px] text-gray-400 uppercase tracking-widest">Encrypted Transfer</div>
-                </div>
-                <div className="space-y-2">
-                  <div className="text-gray-900 font-medium">Free</div>
-                  <div className="text-[10px] text-gray-400 uppercase tracking-widest">No Subscriptions</div>
-                </div>
-              </div>
-            </>
-          ) : (
-            <motion.div
-              key="ai-agent"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              className="space-y-8"
-            >
-              {!activeAiTool ? (
-                <>
-                  <div className="text-center space-y-4">
-                    <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-red-50 text-red-600 mb-2">
-                      <Sparkles className="w-10 h-10" />
-                    </div>
-                    <h2 className="text-3xl font-bold text-gray-900">AI Document Agent</h2>
-                    <p className="text-gray-500 max-w-lg mx-auto">
-                      Select an AI tool to get started. Our advanced agents can generate content, images, videos, and more.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {AI_TOOLS.map((tool) => (
-                      <button
-                        key={tool.id}
-                        onClick={() => {
-                          setActiveAiTool(tool.id);
-                          setAiInput("");
-                          setAiOutput(null);
-                        }}
-                        className="group relative flex flex-col p-8 rounded-3xl bg-white border border-gray-100 shadow-sm hover:shadow-xl transition-all text-left overflow-hidden"
-                      >
-                        <div className={cn("absolute top-0 right-0 w-32 h-32 -mr-8 -mt-8 rounded-full opacity-5 transition-transform group-hover:scale-110", tool.color)} />
-                        <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center text-white mb-6 shadow-lg", tool.color)}>
-                          <tool.icon className="w-7 h-7" />
-                        </div>
-                        <h3 className="text-xl font-bold text-gray-900 mb-2">{tool.label}</h3>
-                        <p className="text-sm text-gray-500 leading-relaxed">{tool.description}</p>
-                        <div className="mt-6 flex items-center text-sm font-bold text-gray-900 group-hover:text-red-600 transition-colors">
-                          Try now
-                          <ArrowRightLeft className="w-4 h-4 ml-2 rotate-180" />
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <div className="space-y-6">
-                  <button 
-                    onClick={() => setActiveAiTool(null)}
-                    className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-red-600 transition-colors"
-                  >
-                    <ArrowRightLeft className="w-4 h-4" />
-                    Back to all AI tools
-                  </button>
-
-                  <Card className="border-none shadow-2xl rounded-3xl bg-white overflow-hidden">
-                    <CardHeader className="bg-gray-50/50 border-b border-gray-100">
-                      <div className="flex items-center gap-4">
-                        <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center text-white shadow-md", AI_TOOLS.find(t => t.id === activeAiTool)?.color)}>
-                          {(() => {
-                            const Icon = AI_TOOLS.find(t => t.id === activeAiTool)?.icon;
-                            return Icon ? <Icon className="w-6 h-6" /> : null;
-                          })()}
-                        </div>
-                        <div>
-                          <CardTitle className="text-xl font-bold">
-                            {AI_TOOLS.find(t => t.id === activeAiTool)?.label}
-                          </CardTitle>
-                          <CardDescription>
-                            {AI_TOOLS.find(t => t.id === activeAiTool)?.description}
-                          </CardDescription>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="p-8 space-y-8 min-h-[400px]">
-                      {aiOutput ? (
-                        <div className="space-y-6">
-                          <div className="flex items-center justify-between">
-                            <h4 className="text-sm font-bold text-gray-400 uppercase tracking-widest">Result</h4>
-                            <Button variant="ghost" size="sm" onClick={() => setAiOutput(null)} className="rounded-xl text-red-600 font-bold">Clear</Button>
-                          </div>
-                          <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100">
-                            {aiOutput.type === "text" && (
-                              <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-wrap leading-relaxed">
-                                {aiOutput.data}
-                              </div>
-                            )}
-                            {aiOutput.type === "image" && (
-                              <div className="flex flex-col items-center space-y-4">
-                                <img src={aiOutput.data} alt="Generated" className="rounded-2xl shadow-xl max-w-full h-auto" referrerPolicy="no-referrer" />
-                                <a href={aiOutput.data} download="generated-image.png" className={cn(buttonVariants(), "rounded-xl bg-red-600")}>
-                                  <Download className="w-4 h-4 mr-2" />
-                                  Download Image
-                                </a>
-                              </div>
-                            )}
-                            {aiOutput.type === "video" && (
-                              <div className="flex flex-col items-center space-y-4">
-                                <video src={aiOutput.data} controls className="rounded-2xl shadow-xl w-full max-w-2xl" />
-                                <a href={aiOutput.data} download="generated-video.mp4" className={cn(buttonVariants(), "rounded-xl bg-red-600")}>
-                                  <Download className="w-4 h-4 mr-2" />
-                                  Download Video
-                                </a>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-center justify-center h-full text-center space-y-6 py-12">
-                          <div className="w-20 h-20 rounded-full bg-gray-50 flex items-center justify-center text-gray-300">
-                            <BotIcon className="w-10 h-10" />
-                          </div>
-                          <div className="max-w-md">
-                            <p className="text-lg font-bold text-gray-900">Ready to help</p>
-                            <p className="text-sm text-gray-500">Enter your request below and I'll generate the {activeAiTool?.replace("-", " ")} for you.</p>
-                          </div>
-                        </div>
-                      )}
-                    </CardContent>
-                    <CardFooter className="p-6 bg-gray-50/50 border-t border-gray-100">
-                      <div className="flex w-full gap-3">
-                        <textarea
-                          rows={1}
-                          placeholder={AI_TOOLS.find(t => t.id === activeAiTool)?.prompt}
-                          value={aiInput}
-                          onChange={(e) => setAiInput(e.target.value)}
-                          className="flex-1 min-h-[56px] max-h-32 p-4 rounded-2xl border-2 border-gray-100 focus:outline-none focus:border-red-600 transition-all resize-none bg-white text-gray-900"
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !e.shiftKey) {
-                              e.preventDefault();
-                              handleAiAction();
-                            }
-                          }}
-                        />
-                        <Button 
-                          disabled={isAiLoading || !aiInput.trim()}
-                          onClick={handleAiAction}
-                          className="h-14 w-14 rounded-2xl bg-red-600 hover:bg-red-700 shadow-lg flex-shrink-0"
-                        >
-                          {isAiLoading ? (
-                            <Loader2 className="w-6 h-6 animate-spin" />
-                          ) : (
-                            <Send className="w-6 h-6" />
-                          )}
-                        </Button>
-                      </div>
-                    </CardFooter>
-                  </Card>
-                </div>
-              )}
-            </motion.div>
-          )}
+          <Routes>
+            <Route path="/" element={<HomeView setConversionType={setConversionType} setFileState={setFileState} />} />
+            <Route path="/pdf/:toolId" element={<PdfToolView conversionType={conversionType} setConversionType={setConversionType} fileState={fileState} setFileState={setFileState} urlInput={urlInput} setUrlInput={setUrlInput} handleConvert={handleConvert} handleFileChange={handleFileChange} handleDrop={handleDrop} rotation={rotation} setRotation={setRotation} reset={reset} />} />
+            <Route path="/ai" element={<AiAgentHomeView />} />
+            <Route path="/ai/:toolId" element={<AiToolView aiInput={aiInput} setAiInput={setAiInput} aiOutput={aiOutput} setAiOutput={setAiOutput} isAiLoading={isAiLoading} handleAiAction={handleAiAction} />} />
+          </Routes>
 
           <footer className="text-center text-gray-400 text-xs pt-8 font-light">
             <p>© 2026 DocuMorph. All rights reserved.</p>
           </footer>
         </div>
       </main>
+    </div>
+  );
+}
+
+function HomeView({ setConversionType, setFileState }: { setConversionType: (t: ConversionType) => void, setFileState: (s: FileState | null) => void }) {
+  return (
+    <>
+      <header className="text-center space-y-2">
+        <motion.div 
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="inline-flex items-center justify-center w-16 h-16 rounded-3xl bg-red-600 text-white mb-4 shadow-xl"
+        >
+          <FileText className="w-8 h-8" />
+        </motion.div>
+        <h1 className="text-4xl font-bold tracking-tight text-gray-900">DocuMorph</h1>
+        <p className="text-gray-500 font-medium">Every tool you need to work with PDFs in one place</p>
+      </header>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {CONVERSION_OPTIONS.map((option) => (
+          <Link
+            key={option.id}
+            to={`/pdf/${option.id}`}
+            onClick={() => {
+              setConversionType(option.id);
+              setFileState(null);
+            }}
+            className={cn(
+              "flex flex-col items-center p-6 rounded-2xl border-none transition-all text-center space-y-4 shadow-sm group bg-white hover:bg-gray-50"
+            )}
+          >
+            <div className={cn(
+              "p-4 rounded-xl transition-colors bg-gray-100 text-red-600 group-hover:bg-red-50"
+            )}>
+              <option.icon className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="font-bold text-gray-900 text-sm">{option.label}</div>
+              <div className="text-[10px] text-gray-400 mt-1 leading-tight">{option.description}</div>
+            </div>
+          </Link>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-3 gap-8 text-center pt-8">
+        <div className="space-y-2">
+          <div className="text-gray-900 font-medium">Fast</div>
+          <div className="text-[10px] text-gray-400 uppercase tracking-widest">Instant Processing</div>
+        </div>
+        <div className="space-y-2">
+          <div className="text-gray-900 font-medium">Secure</div>
+          <div className="text-[10px] text-gray-400 uppercase tracking-widest">Encrypted Transfer</div>
+        </div>
+        <div className="space-y-2">
+          <div className="text-gray-900 font-medium">Free</div>
+          <div className="text-[10px] text-gray-400 uppercase tracking-widest">No Subscriptions</div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function PdfToolView({ 
+  conversionType, 
+  setConversionType,
+  fileState, 
+  setFileState, 
+  urlInput, 
+  setUrlInput, 
+  handleConvert, 
+  handleFileChange, 
+  handleDrop, 
+  rotation, 
+  setRotation, 
+  reset 
+}: any) {
+  const { toolId } = useParams<{ toolId: string }>();
+  
+  React.useEffect(() => {
+    if (toolId && toolId !== conversionType) {
+      setConversionType(toolId as ConversionType);
+    }
+  }, [toolId, conversionType, setConversionType]);
+
+  const currentOption = CONVERSION_OPTIONS.find(o => o.id === (toolId || conversionType))!;
+
+  return (
+    <AnimatePresence mode="wait">
+      {!fileState ? (
+        <motion.div
+          key="selection"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+          className="space-y-8"
+        >
+          <div className="flex items-center gap-4">
+            <Link to="/" className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+              <X className="w-6 h-6 text-gray-400" />
+            </Link>
+            <h2 className="text-2xl font-bold text-gray-900">{currentOption.label}</h2>
+          </div>
+
+          <Card className="border-none shadow-md bg-white rounded-3xl overflow-hidden">
+            <CardContent className="pt-12 pb-12">
+              {toolId === "url-to-pdf" ? (
+                <div className="flex flex-col items-center justify-center space-y-8">
+                  <div className="w-24 h-24 rounded-full bg-red-50 flex items-center justify-center text-red-600">
+                    <Globe className="w-12 h-12" />
+                  </div>
+                  <div className="text-center w-full max-w-lg">
+                    <p className="text-xl font-bold text-gray-900 mb-6">
+                      Enter website URL to convert
+                    </p>
+                    <div className="flex gap-3">
+                      <input 
+                        type="url"
+                        placeholder="https://example.com"
+                        value={urlInput}
+                        onChange={(e) => setUrlInput(e.target.value)}
+                        className="flex-1 h-14 px-6 rounded-2xl border-2 border-gray-100 focus:outline-none focus:border-red-600 transition-all text-lg"
+                      />
+                      <Button 
+                        onClick={handleConvert}
+                        className="h-14 rounded-2xl bg-red-600 hover:bg-red-700 px-8 text-lg font-bold"
+                      >
+                        Convert
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div 
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={handleDrop}
+                  className="flex flex-col items-center justify-center space-y-8"
+                >
+                  <div className="w-24 h-24 rounded-full bg-red-50 flex items-center justify-center text-red-600">
+                    <FileUp className="w-12 h-12" />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-gray-900">
+                      {currentOption.multiple ? "Select PDF files" : "Select PDF file"}
+                    </p>
+                    <p className="text-gray-400 mt-2">
+                      or drag and drop here
+                    </p>
+                  </div>
+                  <label className={cn(buttonVariants({ variant: "default" }), "cursor-pointer rounded-2xl h-16 px-12 bg-red-600 hover:bg-red-700 text-lg font-bold shadow-lg transition-all")}>
+                    Select Files
+                    <input 
+                      type="file" 
+                      className="hidden" 
+                      multiple={currentOption.multiple}
+                      accept={currentOption.accept}
+                      onChange={handleFileChange}
+                    />
+                  </label>
+                  {toolId === "rotate-pdf" && (
+                    <div className="flex items-center gap-4 pt-4">
+                      <span className="text-sm font-medium text-gray-600">Rotation:</span>
+                      {[90, 180, 270].map(deg => (
+                        <Button 
+                          key={deg}
+                          variant={rotation === deg ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setRotation(deg)}
+                          className="rounded-xl"
+                        >
+                          {deg}°
+                        </Button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </motion.div>
+      ) : (
+        <motion.div
+          key="processing"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="w-full max-w-2xl mx-auto"
+        >
+          <Card className="shadow-2xl border-none rounded-3xl bg-white overflow-hidden">
+            <CardHeader className="bg-gray-50/50 border-b border-gray-100">
+              <CardTitle className="flex items-center gap-3 text-xl font-bold">
+                {fileState.status === "completed" ? (
+                  <CheckCircle2 className="w-6 h-6 text-green-500" />
+                ) : fileState.status === "error" ? (
+                  <AlertCircle className="w-6 h-6 text-red-500" />
+                ) : (
+                  <Loader2 className="w-6 h-6 text-red-600 animate-spin" />
+                )}
+                {fileState.status === "idle" && "Ready to Process"}
+                {fileState.status === "uploading" && "Uploading..."}
+                {fileState.status === "converting" && "Processing..."}
+                {fileState.status === "completed" && "Task Complete!"}
+                {fileState.status === "error" && "Error Occurred"}
+              </CardTitle>
+              <CardDescription className="font-medium">
+                {toolId === "url-to-pdf" ? urlInput : `${fileState.files.length} file(s) selected`}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-8 pt-8">
+              <div className="space-y-4 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                {toolId === "url-to-pdf" ? (
+                  <div className="flex items-center p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                    <div className="p-3 bg-white rounded-xl shadow-sm mr-4 text-purple-600">
+                      <Globe className="w-6 h-6" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-gray-900 truncate">{urlInput}</p>
+                      <p className="text-[10px] text-gray-500 uppercase tracking-widest">Website URL</p>
+                    </div>
+                  </div>
+                ) : (
+                  fileState.files.map((file: any, i: number) => (
+                    <div key={i} className="flex items-center p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                      <div className="p-3 bg-white rounded-xl shadow-sm mr-4 text-red-600">
+                        <FileText className="w-6 h-6" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-gray-900 truncate">{file.name}</p>
+                        <p className="text-[10px] text-gray-500 uppercase tracking-widest">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                      </div>
+                      {fileState.status === "idle" && (
+                        <Button variant="ghost" size="icon" onClick={() => {
+                          const newFiles = [...fileState.files];
+                          newFiles.splice(i, 1);
+                          if (newFiles.length === 0) setFileState(null);
+                          else setFileState({ ...fileState, files: newFiles });
+                        }} className="rounded-full hover:bg-red-50 hover:text-red-600">
+                          <X className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {(fileState.status === "uploading" || fileState.status === "converting") && (
+                <div className="space-y-4">
+                  <div className="flex justify-between text-xs font-bold uppercase tracking-widest text-gray-400">
+                    <span>{fileState.status === "uploading" ? "Uploading" : "Processing"}</span>
+                    <span>{fileState.progress}%</span>
+                  </div>
+                  <Progress value={fileState.progress} className="h-2 bg-gray-100" />
+                </div>
+              )}
+
+              {fileState.status === "error" && (
+                <div className="p-6 rounded-2xl bg-red-50 border-2 border-red-100 text-red-700 text-sm font-medium">
+                  {fileState.error}
+                </div>
+              )}
+
+              {fileState.status === "completed" && (
+                <div className="flex flex-col items-center py-6 space-y-4">
+                  <div className="w-24 h-24 rounded-full bg-green-50 flex items-center justify-center text-green-500">
+                    <CheckCircle2 className="w-12 h-12" />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xl font-bold text-gray-900">Success!</p>
+                    <p className="text-sm text-gray-500 mt-1">Your files have been processed successfully.</p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+            <CardFooter className="flex gap-4 p-8 bg-gray-50/50 border-t border-gray-100">
+              {fileState.status === "idle" && (
+                <>
+                  <Button variant="outline" className="flex-1 h-14 rounded-2xl border-2 border-gray-200 font-bold" onClick={reset}>Cancel</Button>
+                  <Button className="flex-1 h-14 rounded-2xl bg-red-600 hover:bg-red-700 text-lg font-bold shadow-lg" onClick={handleConvert}>
+                    Process Now
+                  </Button>
+                </>
+              )}
+              {fileState.status === "completed" && (
+                <>
+                  <Button variant="outline" className="flex-1 h-14 rounded-2xl border-2 border-gray-200 font-bold" onClick={reset}>
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Start Over
+                  </Button>
+                  <a 
+                    href={fileState.resultUrl} 
+                    download={
+                      toolId === "split-pdf" ? "split_pages.zip" :
+                      toolId === "pdf-to-word" ? "converted.docx" :
+                      "processed.pdf"
+                    }
+                    className={cn(buttonVariants(), "flex-1 h-14 rounded-2xl bg-red-600 hover:bg-red-700 no-underline flex items-center justify-center text-lg font-bold shadow-lg")}
+                  >
+                    <Download className="w-5 h-5 mr-2" />
+                    Download
+                  </a>
+                </>
+              )}
+              {fileState.status === "error" && (
+                <Button className="w-full h-14 rounded-2xl bg-red-600 hover:bg-red-700 font-bold" onClick={reset}>Try Again</Button>
+              )}
+              {(fileState.status === "uploading" || fileState.status === "converting") && (
+                <Button disabled className="w-full h-14 rounded-2xl bg-gray-100 text-gray-400 cursor-not-allowed font-bold">
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  Please wait...
+                </Button>
+              )}
+            </CardFooter>
+          </Card>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+function AiAgentHomeView() {
+  return (
+    <motion.div
+      key="ai-agent"
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+      className="space-y-8"
+    >
+      <div className="text-center space-y-4">
+        <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-red-50 text-red-600 mb-2">
+          <Sparkles className="w-10 h-10" />
+        </div>
+        <h2 className="text-3xl font-bold text-gray-900">AI Document Agent</h2>
+        <p className="text-gray-500 max-w-lg mx-auto">
+          Select an AI tool to get started. Our advanced agents can generate content, images, videos, and more.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {AI_TOOLS.map((tool) => (
+          <Link
+            key={tool.id}
+            to={`/ai/${tool.id}`}
+            className="group relative flex flex-col p-8 rounded-3xl bg-white border border-gray-100 shadow-sm hover:shadow-xl transition-all text-left overflow-hidden"
+          >
+            <div className={cn("absolute top-0 right-0 w-32 h-32 -mr-8 -mt-8 rounded-full opacity-5 transition-transform group-hover:scale-110", tool.color)} />
+            <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center text-white mb-6 shadow-lg", tool.color)}>
+              <tool.icon className="w-7 h-7" />
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">{tool.label}</h3>
+            <p className="text-sm text-gray-500 leading-relaxed">{tool.description}</p>
+            <div className="mt-6 flex items-center text-sm font-bold text-gray-900 group-hover:text-red-600 transition-colors">
+              Try now
+              <ArrowRightLeft className="w-4 h-4 ml-2 rotate-180" />
+            </div>
+          </Link>
+        ))}
+      </div>
+    </motion.div>
+  );
+}
+
+function AiToolView({ aiInput, setAiInput, aiOutput, setAiOutput, isAiLoading, handleAiAction }: any) {
+  const { toolId } = useParams<{ toolId: AiToolId }>();
+  const tool = AI_TOOLS.find(t => t.id === toolId);
+
+  if (!tool) return <div>Tool not found</div>;
+
+  return (
+    <div className="space-y-6">
+      <Link 
+        to="/ai"
+        className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-red-600 transition-colors"
+      >
+        <ArrowRightLeft className="w-4 h-4" />
+        Back to all AI tools
+      </Link>
+
+      <Card className="border-none shadow-2xl rounded-3xl bg-white overflow-hidden">
+        <CardHeader className="bg-gray-50/50 border-b border-gray-100">
+          <div className="flex items-center gap-4">
+            <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center text-white shadow-md", tool.color)}>
+              <tool.icon className="w-6 h-6" />
+            </div>
+            <div>
+              <CardTitle className="text-xl font-bold">
+                {tool.label}
+              </CardTitle>
+              <CardDescription>
+                {tool.description}
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-8 space-y-8 min-h-[400px]">
+          {aiOutput ? (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-bold text-gray-400 uppercase tracking-widest">Result</h4>
+                <Button variant="ghost" size="sm" onClick={() => setAiOutput(null)} className="rounded-xl text-red-600 font-bold">Clear</Button>
+              </div>
+              <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100">
+                {aiOutput.type === "text" && (
+                  <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-wrap leading-relaxed">
+                    {aiOutput.data}
+                  </div>
+                )}
+                {aiOutput.type === "image" && (
+                  <div className="flex flex-col items-center space-y-4">
+                    <img src={aiOutput.data} alt="Generated" className="rounded-2xl shadow-xl max-w-full h-auto" referrerPolicy="no-referrer" />
+                    <a href={aiOutput.data} download="generated-image.png" className={cn(buttonVariants(), "rounded-xl bg-red-600")}>
+                      <Download className="w-4 h-4 mr-2" />
+                      Download Image
+                    </a>
+                  </div>
+                )}
+                {aiOutput.type === "video" && (
+                  <div className="flex flex-col items-center space-y-4">
+                    <video src={aiOutput.data} controls className="rounded-2xl shadow-xl w-full max-w-2xl" />
+                    <a href={aiOutput.data} download="generated-video.mp4" className={cn(buttonVariants(), "rounded-xl bg-red-600")}>
+                      <Download className="w-4 h-4 mr-2" />
+                      Download Video
+                    </a>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full text-center space-y-6 py-12">
+              <div className="w-20 h-20 rounded-full bg-gray-50 flex items-center justify-center text-gray-300">
+                <BotIcon className="w-10 h-10" />
+              </div>
+              <div className="max-w-md">
+                <p className="text-lg font-bold text-gray-900">Ready to help</p>
+                <p className="text-sm text-gray-500">Enter your request below and I'll generate the {toolId?.replace("-", " ")} for you.</p>
+              </div>
+            </div>
+          )}
+        </CardContent>
+        <CardFooter className="p-6 bg-gray-50/50 border-t border-gray-100">
+          <div className="flex w-full gap-3">
+            <textarea
+              rows={1}
+              placeholder={tool.prompt}
+              value={aiInput}
+              onChange={(e) => setAiInput(e.target.value)}
+              className="flex-1 min-h-[56px] max-h-32 p-4 rounded-2xl border-2 border-gray-100 focus:outline-none focus:border-red-600 transition-all resize-none bg-white text-gray-900"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleAiAction(toolId);
+                }
+              }}
+            />
+            <Button 
+              disabled={isAiLoading || !aiInput.trim()}
+              onClick={() => handleAiAction(toolId)}
+              className="h-14 w-14 rounded-2xl bg-red-600 hover:bg-red-700 shadow-lg flex-shrink-0"
+            >
+              {isAiLoading ? (
+                <Loader2 className="w-6 h-6 animate-spin" />
+              ) : (
+                <Send className="w-6 h-6" />
+              )}
+            </Button>
+          </div>
+        </CardFooter>
+      </Card>
     </div>
   );
 }
