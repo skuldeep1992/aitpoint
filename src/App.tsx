@@ -10,6 +10,7 @@ import {
   FileSpreadsheet,
   FileCode,
   ArrowRightLeft,
+  ArrowUpDown,
   X,
   FileUp,
   Files,
@@ -32,7 +33,9 @@ import {
   Send,
   User as UserIcon,
   Bot as BotIcon,
-  Search
+  Search,
+  Calculator,
+  Wrench
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Routes, Route, Link, useLocation, useParams, useNavigate } from "react-router-dom";
@@ -202,6 +205,16 @@ const SUPPORTED_LANGUAGES = [
   "Telugu", "Tamil", "Gujarati", "Urdu", "Kannada", "Odia", "Malayalam", "Punjabi"
 ];
 
+const UTILITY_TOOLS = [
+  {
+    id: "tax-calculator",
+    label: "Income Tax Calculator",
+    description: "Calculate tax for Old & New regimes (FY 2024-25)",
+    icon: Calculator,
+    color: "bg-indigo-600"
+  }
+];
+
 export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -215,6 +228,7 @@ export default function App() {
   const [urlInput, setUrlInput] = useState("");
   const [rotation, setRotation] = useState(90);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isToolsMenuOpen, setIsToolsMenuOpen] = useState(false);
   const [targetLang, setTargetLang] = useState("English");
   const [sourceLang, setSourceLang] = useState("Auto-detect");
 
@@ -550,7 +564,7 @@ export default function App() {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: 10 }}
                       onMouseLeave={() => setIsMenuOpen(false)}
-                      className="absolute top-full left-0 mt-1 w-64 bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 grid grid-cols-1 gap-1"
+                      className="absolute top-full left-0 mt-1 w-64 bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 grid grid-cols-1 gap-1 z-50"
                     >
                       {CONVERSION_OPTIONS.map((option) => (
                         <Link
@@ -569,6 +583,51 @@ export default function App() {
                           <div>
                             <div className="text-xs font-bold text-gray-900">{option.label}</div>
                             <div className="text-[10px] text-gray-400">{option.description}</div>
+                          </div>
+                        </Link>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              <div className="relative">
+                <button 
+                  onMouseEnter={() => setIsToolsMenuOpen(true)}
+                  className={cn(
+                    "px-4 py-2 rounded-xl text-sm font-bold transition-colors flex items-center gap-2",
+                    isToolsMenuOpen ? "bg-gray-50 text-gray-900" : "text-gray-600 hover:bg-gray-50"
+                  )}
+                >
+                  <Wrench className="w-4 h-4" />
+                  Tools
+                  <ChevronDown className={cn("w-4 h-4 transition-transform", isToolsMenuOpen && "rotate-180")} />
+                </button>
+
+                <AnimatePresence>
+                  {isToolsMenuOpen && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 10 }}
+                      onMouseLeave={() => setIsToolsMenuOpen(false)}
+                      className="absolute top-full left-0 mt-1 w-64 bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 grid grid-cols-1 gap-1 z-50"
+                    >
+                      {UTILITY_TOOLS.map((tool) => (
+                        <Link
+                          key={tool.id}
+                          to={`/tools/${tool.id}`}
+                          onClick={() => {
+                            setIsToolsMenuOpen(false);
+                          }}
+                          className="flex items-center gap-3 p-3 rounded-xl hover:bg-red-50 transition-colors text-left group"
+                        >
+                          <div className={cn("p-2 rounded-lg text-white transition-colors", tool.color)}>
+                            <tool.icon className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <div className="text-xs font-bold text-gray-900">{tool.label}</div>
+                            <div className="text-[10px] text-gray-400">{tool.description}</div>
                           </div>
                         </Link>
                       ))}
@@ -612,7 +671,9 @@ export default function App() {
             <Route path="/" element={<HomeView setConversionType={setConversionType} setFileState={setFileState} />} />
             <Route path="/pdf/:toolId" element={<PdfToolView conversionType={conversionType} setConversionType={setConversionType} fileState={fileState} setFileState={setFileState} urlInput={urlInput} setUrlInput={setUrlInput} handleConvert={handleConvert} handleFileChange={handleFileChange} handleDrop={handleDrop} rotation={rotation} setRotation={setRotation} reset={reset} />} />
             <Route path="/ai" element={<AiAgentHomeView />} />
+            <Route path="/ai/train-status" element={<TrainStatusView handleAiAction={handleAiAction} isAiLoading={isAiLoading} aiOutput={aiOutput} setAiOutput={setAiOutput} />} />
             <Route path="/ai/:toolId" element={<AiToolView aiInput={aiInput} setAiInput={setAiInput} aiOutput={aiOutput} setAiOutput={setAiOutput} isAiLoading={isAiLoading} handleAiAction={handleAiAction} sourceLang={sourceLang} setSourceLang={setSourceLang} targetLang={targetLang} setTargetLang={setTargetLang} />} />
+            <Route path="/tools/tax-calculator" element={<TaxCalculatorView />} />
           </Routes>
 
           <footer className="text-center text-gray-400 text-xs pt-8 font-light">
@@ -706,6 +767,33 @@ function HomeView({ setConversionType, setFileState }: { setConversionType: (t: 
             </div>
           </Link>
         ))}
+      </div>
+
+      <div className="pt-12">
+        <div className="flex items-center gap-3 mb-8">
+          <Wrench className="w-6 h-6 text-indigo-600" />
+          <h2 className="text-2xl font-bold text-gray-900">Utility Tools</h2>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {UTILITY_TOOLS.map((tool) => (
+            <Link
+              key={tool.id}
+              to={`/tools/${tool.id}`}
+              className="group flex items-center gap-6 p-6 rounded-3xl bg-white border border-gray-100 shadow-sm hover:shadow-xl transition-all text-left"
+            >
+              <div className={cn("w-16 h-16 rounded-2xl flex items-center justify-center text-white shadow-lg shrink-0", tool.color)}>
+                <tool.icon className="w-8 h-8" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-gray-900 mb-1">{tool.label}</h3>
+                <p className="text-sm text-gray-500">{tool.description}</p>
+              </div>
+              <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-all">
+                <ArrowRightLeft className="w-5 h-5 rotate-180" />
+              </div>
+            </Link>
+          ))}
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-8 text-center pt-8">
@@ -1021,6 +1109,402 @@ function AiAgentHomeView() {
         ))}
       </div>
     </motion.div>
+  );
+}
+
+function TaxCalculatorView() {
+  const [income, setIncome] = useState<string>("");
+  const [deductions, setDeductions] = useState<string>(""); // For Old Regime
+  const [results, setResults] = useState<any>(null);
+
+  const calculateTax = () => {
+    const grossIncome = parseFloat(income) || 0;
+    const oldDeductions = parseFloat(deductions) || 0;
+
+    // --- Old Regime Calculation ---
+    const oldStdDeduction = 50000;
+    const oldTaxableIncome = Math.max(0, grossIncome - oldStdDeduction - oldDeductions);
+    let oldTax = 0;
+
+    if (oldTaxableIncome > 1000000) {
+      oldTax += (oldTaxableIncome - 1000000) * 0.3;
+      oldTax += 500000 * 0.2;
+      oldTax += 250000 * 0.05;
+    } else if (oldTaxableIncome > 500000) {
+      oldTax += (oldTaxableIncome - 500000) * 0.2;
+      oldTax += 250000 * 0.05;
+    } else if (oldTaxableIncome > 250000) {
+      oldTax += (oldTaxableIncome - 250000) * 0.05;
+    }
+
+    // Rebate u/s 87A for Old Regime
+    if (oldTaxableIncome <= 500000) {
+      oldTax = Math.max(0, oldTax - 12500);
+    }
+    const oldCess = oldTax * 0.04;
+    const totalOldTax = oldTax + oldCess;
+
+    // --- New Regime Calculation (FY 2024-25) ---
+    const newStdDeduction = 75000;
+    const newTaxableIncome = Math.max(0, grossIncome - newStdDeduction);
+    let newTax = 0;
+
+    if (newTaxableIncome > 1500000) {
+      newTax += (newTaxableIncome - 1500000) * 0.3;
+      newTax += 300000 * 0.2;
+      newTax += 200000 * 0.15;
+      newTax += 300000 * 0.1;
+      newTax += 400000 * 0.05;
+    } else if (newTaxableIncome > 1200000) {
+      newTax += (newTaxableIncome - 1200000) * 0.2;
+      newTax += 200000 * 0.15;
+      newTax += 300000 * 0.1;
+      newTax += 400000 * 0.05;
+    } else if (newTaxableIncome > 1000000) {
+      newTax += (newTaxableIncome - 1000000) * 0.15;
+      newTax += 300000 * 0.1;
+      newTax += 400000 * 0.05;
+    } else if (newTaxableIncome > 700000) {
+      newTax += (newTaxableIncome - 700000) * 0.1;
+      newTax += 400000 * 0.05;
+    } else if (newTaxableIncome > 300000) {
+      newTax += (newTaxableIncome - 300000) * 0.05;
+    }
+
+    // Rebate u/s 87A for New Regime (up to 7L)
+    if (newTaxableIncome <= 700000) {
+      newTax = Math.max(0, newTax - 25000);
+    }
+    const newCess = newTax * 0.04;
+    const totalNewTax = newTax + newCess;
+
+    setResults({
+      old: {
+        taxable: oldTaxableIncome,
+        tax: oldTax,
+        cess: oldCess,
+        total: totalOldTax
+      },
+      new: {
+        taxable: newTaxableIncome,
+        tax: newTax,
+        cess: newCess,
+        total: totalNewTax
+      }
+    });
+  };
+
+  return (
+    <div className="space-y-6">
+      <Link 
+        to="/ai"
+        className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-red-600 transition-colors"
+      >
+        <ArrowRightLeft className="w-4 h-4" />
+        Back to all tools
+      </Link>
+
+      <Card className="border-none shadow-2xl rounded-3xl bg-white overflow-hidden">
+        <CardHeader className="bg-indigo-600 text-white p-8">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center">
+              <Calculator className="w-6 h-6" />
+            </div>
+            <div>
+              <CardTitle className="text-2xl font-bold">Income Tax Calculator</CardTitle>
+              <CardDescription className="text-indigo-100">FY 2024-25 (Assessment Year 2025-26)</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-8 space-y-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-gray-500 uppercase tracking-wider">Gross Annual Income (₹)</label>
+              <input 
+                type="number"
+                placeholder="e.g. 1200000"
+                value={income}
+                onChange={(e) => setIncome(e.target.value)}
+                className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:outline-none focus:border-indigo-600 transition-all font-medium text-lg"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-gray-500 uppercase tracking-wider">Deductions (80C, 80D, etc. - Old Regime Only) (₹)</label>
+              <input 
+                type="number"
+                placeholder="e.g. 150000"
+                value={deductions}
+                onChange={(e) => setDeductions(e.target.value)}
+                className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:outline-none focus:border-indigo-600 transition-all font-medium text-lg"
+              />
+            </div>
+          </div>
+
+          <Button 
+            onClick={calculateTax}
+            className="w-full h-16 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold text-xl shadow-lg transition-all active:scale-[0.98]"
+          >
+            Calculate Tax
+          </Button>
+
+          {results && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
+              {/* Old Regime Card */}
+              <div className="bg-gray-50 rounded-3xl p-6 border-2 border-gray-100 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-lg font-bold text-gray-900">Old Regime</h4>
+                  <span className="px-3 py-1 bg-gray-200 text-gray-600 rounded-full text-xs font-bold">Standard</span>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Taxable Income</span>
+                    <span className="font-bold">₹{results.old.taxable.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Income Tax</span>
+                    <span className="font-bold">₹{results.old.tax.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Health & Edu Cess (4%)</span>
+                    <span className="font-bold">₹{results.old.cess.toLocaleString()}</span>
+                  </div>
+                  <div className="pt-4 border-t border-gray-200 flex justify-between items-center">
+                    <span className="font-bold text-gray-900">Total Tax</span>
+                    <span className="text-2xl font-black text-indigo-600">₹{results.old.total.toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* New Regime Card */}
+              <div className="bg-indigo-50 rounded-3xl p-6 border-2 border-indigo-100 space-y-4 relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-2">
+                  <Sparkles className="w-6 h-6 text-indigo-200" />
+                </div>
+                <div className="flex items-center justify-between">
+                  <h4 className="text-lg font-bold text-indigo-900">New Regime</h4>
+                  <span className="px-3 py-1 bg-indigo-600 text-white rounded-full text-xs font-bold">Recommended</span>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-indigo-600/60">Taxable Income</span>
+                    <span className="font-bold text-indigo-900">₹{results.new.taxable.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-indigo-600/60">Income Tax</span>
+                    <span className="font-bold text-indigo-900">₹{results.new.tax.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-indigo-600/60">Health & Edu Cess (4%)</span>
+                    <span className="font-bold text-indigo-900">₹{results.new.cess.toLocaleString()}</span>
+                  </div>
+                  <div className="pt-4 border-t border-indigo-200 flex justify-between items-center">
+                    <span className="font-bold text-indigo-900">Total Tax</span>
+                    <span className="text-2xl font-black text-indigo-600">₹{results.new.total.toLocaleString()}</span>
+                  </div>
+                </div>
+                {results.new.total < results.old.total && (
+                  <div className="mt-4 p-3 bg-green-100 text-green-700 rounded-xl text-xs font-bold text-center">
+                    You save ₹{(results.old.total - results.new.total).toLocaleString()} with New Regime!
+                  </div>
+                )}
+                {results.old.total < results.new.total && (
+                  <div className="mt-4 p-3 bg-green-100 text-green-700 rounded-xl text-xs font-bold text-center">
+                    You save ₹{(results.new.total - results.old.total).toLocaleString()} with Old Regime!
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </CardContent>
+        <CardFooter className="bg-gray-50 p-6 text-xs text-gray-400 text-center">
+          * This is an estimate based on standard rates for FY 2024-25. Please consult a tax professional for accurate filing.
+        </CardFooter>
+      </Card>
+    </div>
+  );
+}
+
+function TrainStatusView({ handleAiAction, isAiLoading, aiOutput, setAiOutput }: any) {
+  const [trainNo, setTrainNo] = useState("");
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0].replace(/-/g, ''));
+  const [displayDate, setDisplayDate] = useState(new Date().toISOString().split('T')[0]);
+  const [fromStation, setFromStation] = useState("");
+  const [toStation, setToStation] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleCheckStatus = async () => {
+    if (!trainNo.trim()) return;
+    
+    setIsLoading(true);
+    setAiOutput(null);
+
+    try {
+      const response = await fetch(`/api/train/status/${trainNo}/${date}`);
+      const data = await response.json();
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      // Format the API response for display
+      let formattedResult = "";
+      if (data.ResponseCode === "200") {
+        formattedResult = `Train: ${data.TrainNumber}\nStatus: ${data.Message}\n\n`;
+        if (data.TrainHistory && data.TrainHistory.length > 0) {
+          formattedResult += "Recent Stations:\n";
+          data.TrainHistory.slice(0, 5).forEach((h: any) => {
+            formattedResult += `- ${h.StationName}: ${h.Status}\n`;
+          });
+        }
+      } else {
+        formattedResult = data.Message || "No status found for this train and date.";
+      }
+
+      setAiOutput({ type: "text", data: formattedResult });
+    } catch (error: any) {
+      console.error("Train API Error:", error);
+      toast.error(error.message || "Failed to fetch train status. Falling back to AI search...");
+      // Fallback to AI search if API fails or is not configured
+      handleAiAction("train-status", `Check real-time status of train: ${trainNo} for date ${displayDate}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCheckTrains = () => {
+    if (!fromStation.trim() || !toStation.trim()) return;
+    handleAiAction("train-status", `Find trains from ${fromStation} to ${toStation} and their current status.`);
+  };
+
+  const swapStations = () => {
+    const temp = fromStation;
+    setFromStation(toStation);
+    setToStation(temp);
+  };
+
+  return (
+    <div className="space-y-6">
+      <Link 
+        to="/ai"
+        className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-red-600 transition-colors"
+      >
+        <ArrowRightLeft className="w-4 h-4" />
+        Back to all AI tools
+      </Link>
+
+      <div className="bg-red-600 rounded-3xl overflow-hidden shadow-2xl p-8 space-y-8">
+        <div className="text-center">
+          <h2 className="text-3xl font-bold text-white mb-2">Check Train Status</h2>
+          <div className="h-1 w-20 bg-white/50 mx-auto rounded-full" />
+        </div>
+
+        <div className="space-y-8">
+          {/* Search by Train */}
+          <div className="bg-white rounded-2xl p-8 shadow-lg space-y-6">
+            <h3 className="text-xl font-bold text-gray-900">Search by Train</h3>
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-gray-500 uppercase tracking-wider">Train Number/Name</label>
+                  <input 
+                    type="text"
+                    placeholder="Select Train No."
+                    value={trainNo}
+                    onChange={(e) => setTrainNo(e.target.value)}
+                    className="w-full p-5 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:outline-none focus:border-red-600 transition-all font-medium text-lg"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-gray-500 uppercase tracking-wider">Date of Journey</label>
+                  <input 
+                    type="date"
+                    value={displayDate}
+                    onChange={(e) => {
+                      setDisplayDate(e.target.value);
+                      setDate(e.target.value.replace(/-/g, ''));
+                    }}
+                    className="w-full p-5 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:outline-none focus:border-red-600 transition-all font-medium text-lg"
+                  />
+                </div>
+              </div>
+              <Button 
+                onClick={handleCheckStatus}
+                disabled={isAiLoading || isLoading || !trainNo.trim()}
+                className="w-full h-16 bg-red-600 hover:bg-red-700 text-white rounded-2xl font-bold text-xl shadow-lg transition-all active:scale-[0.98]"
+              >
+                {isAiLoading || isLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : "Check Status"}
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-center gap-6">
+            <div className="h-px bg-white/30 flex-1" />
+            <span className="text-white font-bold text-lg uppercase tracking-widest opacity-80">or</span>
+            <div className="h-px bg-white/30 flex-1" />
+          </div>
+
+          {/* Search by Station */}
+          <div className="bg-white rounded-2xl p-8 shadow-lg space-y-6">
+            <h3 className="text-xl font-bold text-gray-900">Search by Station</h3>
+            <div className="space-y-6">
+              <div className="relative space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-gray-500 uppercase tracking-wider">From</label>
+                  <input 
+                    type="text"
+                    placeholder="Enter Station"
+                    value={fromStation}
+                    onChange={(e) => setFromStation(e.target.value)}
+                    className="w-full p-5 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:outline-none focus:border-red-600 transition-all font-medium text-lg"
+                  />
+                </div>
+                
+                <div className="absolute right-6 top-1/2 -translate-y-1/2 z-10">
+                  <button 
+                    onClick={swapStations}
+                    className="w-12 h-12 bg-white border-2 border-gray-100 rounded-full flex items-center justify-center text-red-600 shadow-xl hover:border-red-600 hover:scale-110 transition-all active:rotate-180"
+                  >
+                    <ArrowUpDown className="w-6 h-6" />
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-gray-500 uppercase tracking-wider">To</label>
+                  <input 
+                    type="text"
+                    placeholder="Enter Station"
+                    value={toStation}
+                    onChange={(e) => setToStation(e.target.value)}
+                    className="w-full p-5 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:outline-none focus:border-red-600 transition-all font-medium text-lg"
+                  />
+                </div>
+              </div>
+              <Button 
+                onClick={handleCheckTrains}
+                disabled={isAiLoading || !fromStation.trim() || !toStation.trim()}
+                className="w-full h-16 bg-red-600 hover:bg-red-700 text-white rounded-2xl font-bold text-xl shadow-lg transition-all active:scale-[0.98]"
+              >
+                {isAiLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : "Check Trains"}
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {aiOutput && (
+          <div className="p-6 bg-white border-t border-gray-100">
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="text-sm font-bold text-gray-400 uppercase tracking-widest">Result</h4>
+              <Button variant="ghost" size="sm" onClick={() => setAiOutput(null)} className="rounded-xl text-red-600 font-bold">Clear</Button>
+            </div>
+            <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100">
+              <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-wrap leading-relaxed">
+                {aiOutput.data}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 

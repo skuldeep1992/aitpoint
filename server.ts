@@ -38,6 +38,27 @@ async function startServer() {
     },
   });
 
+  // Indian Rail API Proxy
+  app.get("/api/train/status/:trainNo/:date", async (req, res) => {
+    try {
+      const { trainNo, date } = req.params;
+      const apiKey = process.env.INDIAN_RAIL_API_KEY;
+      
+      if (!apiKey) {
+        return res.status(500).json({ error: "Indian Rail API key is not configured." });
+      }
+
+      const apiUrl = `http://indianrailapi.com/api/v2/livetrainstatus/apikey/${apiKey}/trainnumber/${trainNo}/date/${date}/`;
+      const response = await fetch(apiUrl);
+      const data = await response.json();
+      
+      res.json(data);
+    } catch (error) {
+      console.error("Train API Error:", error);
+      res.status(500).json({ error: "Failed to fetch train status from Indian Rail API" });
+    }
+  });
+
   // API Routes
   app.post("/api/convert", upload.array("files"), async (req, res) => {
     const conversionType = req.body.type || "word-to-pdf";
