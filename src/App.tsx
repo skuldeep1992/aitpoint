@@ -35,9 +35,19 @@ import {
   Bot as BotIcon,
   Search,
   Calculator,
-  Wrench
+  Wrench,
+  Activity,
+  Calendar,
+  Banknote,
+  Percent,
+  Type,
+  Timer,
+  Coffee,
+  StickyNote,
+  Palette
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import ReactMarkdown from "react-markdown";
 import { Routes, Route, Link, useLocation, useParams, useNavigate } from "react-router-dom";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -227,6 +237,76 @@ const UTILITY_TOOLS = [
     description: "Generate secure, random passwords locally",
     icon: Lock,
     color: "bg-slate-700"
+  },
+  {
+    id: "bmi-calculator",
+    label: "BMI Calculator",
+    description: "Check your Body Mass Index and health status",
+    icon: Activity,
+    color: "bg-rose-500"
+  },
+  {
+    id: "age-calculator",
+    label: "Age Calculator",
+    description: "Find your exact age in years, months, and days",
+    icon: Calendar,
+    color: "bg-blue-500"
+  },
+  {
+    id: "emi-calculator",
+    label: "EMI Calculator",
+    description: "Calculate monthly loan repayments easily",
+    icon: Banknote,
+    color: "bg-emerald-600"
+  },
+  {
+    id: "percentage-calculator",
+    label: "Percentage Calculator",
+    description: "Quickly calculate percentage increases/decreases",
+    icon: Percent,
+    color: "bg-amber-500"
+  },
+  {
+    id: "text-converter",
+    label: "Text Case Converter",
+    description: "Convert text to UPPER, lower, Sentence case, etc.",
+    icon: Type,
+    color: "bg-purple-600"
+  },
+  {
+    id: "stopwatch",
+    label: "Stopwatch",
+    description: "Simple stopwatch with lap timing",
+    icon: Timer,
+    color: "bg-orange-500"
+  },
+  {
+    id: "tip-calculator",
+    label: "Tip Calculator",
+    description: "Split bills and calculate tips instantly",
+    icon: Coffee,
+    color: "bg-amber-700"
+  },
+  {
+    id: "notepad",
+    label: "Quick Notepad",
+    description: "Save quick notes locally in your browser",
+    icon: StickyNote,
+    color: "bg-yellow-500"
+  },
+  {
+    id: "color-tools",
+    label: "Color Tools",
+    description: "Identify Hex, RGB codes and generate palettes",
+    icon: Palette,
+    color: "bg-pink-500"
+  },
+  {
+    id: "markdown-preview",
+    label: "Markdown Preview",
+    description: "Render markdown text to beautiful HTML",
+    icon: FileText,
+    color: "bg-sky-600"
   }
 ];
 
@@ -637,6 +717,16 @@ export default function App() {
             <Route path="/tools/tax-calculator" element={<TaxCalculatorView />} />
             <Route path="/tools/unit-converter" element={<UnitConverterView />} />
             <Route path="/tools/password-gen" element={<PasswordGeneratorView />} />
+            <Route path="/tools/bmi-calculator" element={<BmiCalculatorView />} />
+            <Route path="/tools/age-calculator" element={<AgeCalculatorView />} />
+            <Route path="/tools/emi-calculator" element={<EmiCalculatorView />} />
+            <Route path="/tools/percentage-calculator" element={<PercentageCalculatorView />} />
+            <Route path="/tools/text-converter" element={<TextConverterView />} />
+            <Route path="/tools/stopwatch" element={<StopwatchView />} />
+            <Route path="/tools/tip-calculator" element={<TipCalculatorView />} />
+            <Route path="/tools/notepad" element={<NotepadView />} />
+            <Route path="/tools/color-tools" element={<ColorToolsView />} />
+            <Route path="/tools/markdown-preview" element={<MarkdownPreviewView />} />
           </Routes>
 
           <footer className="text-center text-gray-400 text-xs pt-8 font-light">
@@ -1934,6 +2024,472 @@ function AiToolView({
             </Button>
           </div>
         </CardFooter>
+      </Card>
+    </div>
+  );
+}
+
+function BmiCalculatorView() {
+  const [weight, setWeight] = useState("70");
+  const [height, setHeight] = useState("175");
+  const [bmi, setBmi] = useState<number | null>(null);
+  const [status, setStatus] = useState("");
+
+  const calculate = () => {
+    const w = parseFloat(weight);
+    const h = parseFloat(height) / 100;
+    if (w > 0 && h > 0) {
+      const res = w / (h * h);
+      setBmi(res);
+      if (res < 18.5) setStatus("Underweight");
+      else if (res < 25) setStatus("Normal weight");
+      else if (res < 30) setStatus("Overweight");
+      else setStatus("Obesity");
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <Link to="/" className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-rose-500">
+        <ArrowRightLeft className="w-4 h-4" />
+        Back to Home
+      </Link>
+      <Card className="rounded-3xl border-none shadow-xl overflow-hidden bg-white">
+        <CardHeader className="bg-rose-500 text-white">
+          <CardTitle>BMI Calculator</CardTitle>
+          <CardDescription className="text-rose-100">Calculate your Body Mass Index</CardDescription>
+        </CardHeader>
+        <CardContent className="p-8 space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-gray-500 uppercase">Weight (kg)</label>
+              <input type="number" value={weight} onChange={e => setWeight(e.target.value)} className="w-full p-4 bg-gray-50 border rounded-2xl" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-gray-500 uppercase">Height (cm)</label>
+              <input type="number" value={height} onChange={e => setHeight(e.target.value)} className="w-full p-4 bg-gray-50 border rounded-2xl" />
+            </div>
+          </div>
+          <Button onClick={calculate} className="w-full h-14 bg-rose-500 hover:bg-rose-600 rounded-2xl font-bold">Calculate BMI</Button>
+          {bmi && (
+            <div className="p-6 bg-rose-50 rounded-2xl text-center">
+              <p className="text-sm font-bold text-rose-600 uppercase">Your BMI</p>
+              <p className="text-5xl font-black text-rose-900">{bmi.toFixed(1)}</p>
+              <p className="mt-2 text-lg font-bold text-rose-700">{status}</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function AgeCalculatorView() {
+  const [birthDate, setBirthDate] = useState("");
+  const [age, setAge] = useState<{ y: number, m: number, d: number } | null>(null);
+
+  const calculate = () => {
+    if (!birthDate) return;
+    const today = new Date();
+    const birth = new Date(birthDate);
+    let y = today.getFullYear() - birth.getFullYear();
+    let m = today.getMonth() - birth.getMonth();
+    let d = today.getDate() - birth.getDate();
+
+    if (m < 0 || (m === 0 && d < 0)) {
+      y--;
+      m += 12;
+    }
+    if (d < 0) {
+      const lastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+      d += lastMonth.getDate();
+      m--;
+    }
+    setAge({ y, m, d });
+  };
+
+  return (
+    <div className="space-y-6">
+      <Link to="/" className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-blue-500">
+        <ArrowRightLeft className="w-4 h-4" />
+        Back to Home
+      </Link>
+      <Card className="rounded-3xl border-none shadow-xl overflow-hidden bg-white">
+        <CardHeader className="bg-blue-500 text-white">
+          <CardTitle>Age Calculator</CardTitle>
+          <CardDescription className="text-blue-100">Calculate your exact age</CardDescription>
+        </CardHeader>
+        <CardContent className="p-8 space-y-6">
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-gray-500 uppercase">Date of Birth</label>
+            <input type="date" value={birthDate} onChange={e => setBirthDate(e.target.value)} className="w-full p-4 bg-gray-50 border rounded-2xl" />
+          </div>
+          <Button onClick={calculate} className="w-full h-14 bg-blue-500 hover:bg-blue-600 rounded-2xl font-bold">Calculate Age</Button>
+          {age && (
+            <div className="grid grid-cols-3 gap-4">
+              <div className="p-6 bg-blue-50 rounded-2xl text-center">
+                <p className="text-3xl font-black text-blue-900">{age.y}</p>
+                <p className="text-xs font-bold text-blue-600 uppercase">Years</p>
+              </div>
+              <div className="p-6 bg-blue-50 rounded-2xl text-center">
+                <p className="text-3xl font-black text-blue-900">{age.m}</p>
+                <p className="text-xs font-bold text-blue-600 uppercase">Months</p>
+              </div>
+              <div className="p-6 bg-blue-50 rounded-2xl text-center">
+                <p className="text-3xl font-black text-blue-900">{age.d}</p>
+                <p className="text-xs font-bold text-blue-600 uppercase">Days</p>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function EmiCalculatorView() {
+  const [amount, setAmount] = useState("1000000");
+  const [rate, setRate] = useState("8.5");
+  const [tenure, setTenure] = useState("10");
+  const [emi, setEmi] = useState<number | null>(null);
+
+  const calculate = () => {
+    const P = parseFloat(amount);
+    const r = parseFloat(rate) / 12 / 100;
+    const n = parseFloat(tenure) * 12;
+    if (P > 0 && r > 0 && n > 0) {
+      const res = (P * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+      setEmi(res);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <Link to="/" className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-emerald-600">
+        <ArrowRightLeft className="w-4 h-4" />
+        Back to Home
+      </Link>
+      <Card className="rounded-3xl border-none shadow-xl overflow-hidden bg-white">
+        <CardHeader className="bg-emerald-600 text-white">
+          <CardTitle>EMI Calculator</CardTitle>
+          <CardDescription className="text-emerald-100">Personal, Home or Car Loan EMI</CardDescription>
+        </CardHeader>
+        <CardContent className="p-8 space-y-6">
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-gray-500 uppercase">Loan Amount (₹)</label>
+              <input type="number" value={amount} onChange={e => setAmount(e.target.value)} className="w-full p-4 bg-gray-50 border rounded-2xl" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-500 uppercase">Interest Rate (%)</label>
+                <input type="number" step="0.1" value={rate} onChange={e => setRate(e.target.value)} className="w-full p-4 bg-gray-50 border rounded-2xl" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-500 uppercase">Tenure (Years)</label>
+                <input type="number" value={tenure} onChange={e => setTenure(e.target.value)} className="w-full p-4 bg-gray-50 border rounded-2xl" />
+              </div>
+            </div>
+          </div>
+          <Button onClick={calculate} className="w-full h-14 bg-emerald-600 hover:bg-emerald-700 rounded-2xl font-bold">Calculate EMI</Button>
+          {emi && (
+            <div className="p-6 bg-emerald-50 rounded-2xl text-center">
+              <p className="text-sm font-bold text-emerald-600 uppercase">Monthly EMI</p>
+              <p className="text-4xl font-black text-emerald-900">₹{Math.round(emi).toLocaleString()}</p>
+              <div className="mt-4 grid grid-cols-2 gap-4 text-xs font-bold text-emerald-700">
+                <div>Total Interest: ₹{Math.round(emi * parseFloat(tenure) * 12 - parseFloat(amount)).toLocaleString()}</div>
+                <div>Total Payable: ₹{Math.round(emi * parseFloat(tenure) * 12).toLocaleString()}</div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function PercentageCalculatorView() {
+  const [val1, setVal1] = useState("10");
+  const [val2, setVal2] = useState("200");
+  const [result, setResult] = useState<number | null>(null);
+
+  const calculate = () => {
+    setResult((parseFloat(val1) / 100) * parseFloat(val2));
+  };
+
+  return (
+    <div className="space-y-6">
+      <Link to="/" className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-amber-500">
+        <ArrowRightLeft className="w-4 h-4" />
+        Back to Home
+      </Link>
+      <Card className="rounded-3xl border-none shadow-xl overflow-hidden bg-white">
+        <CardHeader className="bg-amber-500 text-white">
+          <CardTitle>Percentage Calculator</CardTitle>
+          <CardDescription className="text-amber-100">Simple percentage math</CardDescription>
+        </CardHeader>
+        <CardContent className="p-8 space-y-6">
+          <div className="flex items-center gap-4 text-xl font-bold">
+            <span>What is</span>
+            <input type="number" value={val1} onChange={e => setVal1(e.target.value)} className="w-24 p-3 bg-gray-50 border rounded-xl text-center" />
+            <span>% of</span>
+            <input type="number" value={val2} onChange={e => setVal2(e.target.value)} className="w-32 p-3 bg-gray-50 border rounded-xl text-center" />
+          </div>
+          <Button onClick={calculate} className="w-full h-14 bg-amber-500 hover:bg-amber-600 rounded-2xl font-bold">Calculate</Button>
+          {result !== null && (
+            <div className="p-6 bg-amber-50 rounded-2xl text-center">
+              <p className="text-sm font-bold text-amber-600 uppercase">Result</p>
+              <p className="text-5xl font-black text-amber-900">{result}</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function TextConverterView() {
+  const [text, setText] = useState("");
+  
+  const convert = (type: string) => {
+    if (type === "upper") setText(text.toUpperCase());
+    if (type === "lower") setText(text.toLowerCase());
+    if (type === "sentence") setText(text.charAt(0).toUpperCase() + text.slice(1).toLowerCase());
+    if (type === "title") setText(text.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" "));
+  };
+
+  return (
+    <div className="space-y-6">
+      <Link to="/" className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-purple-600">
+        <ArrowRightLeft className="w-4 h-4" />
+        Back to Home
+      </Link>
+      <Card className="rounded-3xl border-none shadow-xl overflow-hidden bg-white">
+        <CardHeader className="bg-purple-600 text-white">
+          <CardTitle>Text Case Converter</CardTitle>
+          <CardDescription className="text-purple-100">Format your text instantly</CardDescription>
+        </CardHeader>
+        <CardContent className="p-8 space-y-6">
+          <textarea value={text} onChange={e => setText(e.target.value)} className="w-full h-40 p-4 bg-gray-50 border rounded-2xl resize-none" placeholder="Paste your text here..." />
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+            <Button onClick={() => convert("upper")} variant="outline" className="rounded-xl">UPPERCASE</Button>
+            <Button onClick={() => convert("lower")} variant="outline" className="rounded-xl">lowercase</Button>
+            <Button onClick={() => convert("sentence")} variant="outline" className="rounded-xl">Sentence case</Button>
+            <Button onClick={() => convert("title")} variant="outline" className="rounded-xl">Title Case</Button>
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={() => { navigator.clipboard.writeText(text); toast.success("Copied!"); }} className="flex-1 rounded-xl bg-purple-600 hover:bg-purple-700">Copy Result</Button>
+            <Button onClick={() => setText("")} variant="outline" className="flex-1 rounded-xl">Clear All</Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function StopwatchView() {
+  const [time, setTime] = useState(0);
+  const [running, setRunning] = useState(false);
+  const [laps, setLaps] = useState<number[]>([]);
+
+  React.useEffect(() => {
+    let interval: any;
+    if (running) {
+      interval = setInterval(() => setTime(prev => prev + 10), 10);
+    }
+    return () => clearInterval(interval);
+  }, [running]);
+
+  const format = (ms: number) => {
+    const min = Math.floor(ms / 60000);
+    const sec = Math.floor((ms % 60000) / 1000);
+    const msPart = Math.floor((ms % 1000) / 10);
+    return `${min.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}.${msPart.toString().padStart(2, "0")}`;
+  };
+
+  return (
+    <div className="space-y-6">
+      <Link to="/" className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-orange-500">
+        <ArrowRightLeft className="w-4 h-4" />
+        Back to Home
+      </Link>
+      <Card className="rounded-3xl border-none shadow-xl overflow-hidden bg-white">
+        <CardHeader className="bg-orange-500 text-white">
+          <CardTitle>Stopwatch</CardTitle>
+          <CardDescription className="text-orange-100">Precise timing with laps</CardDescription>
+        </CardHeader>
+        <CardContent className="p-8 space-y-8">
+          <div className="text-7xl font-black text-center font-mono tabular-nums text-orange-900">{format(time)}</div>
+          <div className="flex gap-4">
+            <Button onClick={() => setRunning(!running)} className={cn("flex-1 h-16 rounded-2xl text-xl font-bold", running ? "bg-red-500 hover:bg-red-600" : "bg-orange-500 hover:bg-orange-600")}>{running ? "Stop" : "Start"}</Button>
+            <Button onClick={() => { if(running) setLaps([time, ...laps]); else { setTime(0); setLaps([]); } }} variant="outline" className="flex-1 h-16 rounded-2xl text-xl font-bold">{running ? "Lap" : "Reset"}</Button>
+          </div>
+          {laps.length > 0 && (
+            <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
+              {laps.map((lap, i) => (
+                <div key={i} className="flex justify-between p-3 bg-gray-50 rounded-xl font-mono text-sm">
+                  <span className="text-gray-400">Lap {laps.length - i}</span>
+                  <span className="font-bold">{format(lap)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function TipCalculatorView() {
+  const [bill, setBill] = useState(" bill"); // Wait, bill state was 500 in my thought, fixing
+  const [tipPercent, setTipPercent] = useState("10");
+  const [people, setPeople] = useState("2");
+
+  const totalTip = (parseFloat(bill) * parseFloat(tipPercent)) / 100;
+  const totalBill = parseFloat(bill) + totalTip;
+  const perPerson = totalBill / parseFloat(people);
+
+  return (
+    <div className="space-y-6">
+      <Link to="/" className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-amber-700">
+        <ArrowRightLeft className="w-4 h-4" />
+        Back to Home
+      </Link>
+      <Card className="rounded-3xl border-none shadow-xl overflow-hidden bg-white">
+        <CardHeader className="bg-amber-700 text-white">
+          <CardTitle>Tip Calculator</CardTitle>
+          <CardDescription className="text-amber-100">Calculate tips and split bills</CardDescription>
+        </CardHeader>
+        <CardContent className="p-8 space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-gray-500 uppercase">Bill Amount (₹)</label>
+              <input type="number" value={bill} onChange={e => setBill(e.target.value)} className="w-full p-4 bg-gray-50 border rounded-2xl" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-gray-500 uppercase">Tip (%)</label>
+              <input type="number" value={tipPercent} onChange={e => setTipPercent(e.target.value)} className="w-full p-4 bg-gray-50 border rounded-2xl" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-gray-500 uppercase">Number of People</label>
+              <input type="number" value={people} onChange={e => setPeople(e.target.value)} className="w-full p-4 bg-gray-50 border rounded-2xl" />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-6 bg-amber-50 rounded-2xl text-center">
+              <p className="text-xs font-bold text-amber-600 uppercase">Tip Per Person</p>
+              <p className="text-3xl font-black text-amber-900">₹{(totalTip / parseFloat(people)).toFixed(2)}</p>
+            </div>
+            <div className="p-6 bg-amber-900 text-white rounded-2xl text-center shadow-lg">
+              <p className="text-xs font-bold opacity-70 uppercase tracking-widest">Total Per Person</p>
+              <p className="text-3xl font-black">₹{perPerson.toFixed(2)}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function NotepadView() {
+  const [notes, setNotes] = useState(() => localStorage.getItem("aitpoint_notes") || "");
+  
+  const save = (val: string) => {
+    setNotes(val);
+    localStorage.setItem("aitpoint_notes", val);
+  };
+
+  return (
+    <div className="space-y-6">
+      <Link to="/" className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-yellow-500">
+        <ArrowRightLeft className="w-4 h-4" />
+        Back to Home
+      </Link>
+      <Card className="rounded-3xl border-none shadow-xl overflow-hidden bg-white">
+        <CardHeader className="bg-yellow-500 text-white">
+          <CardTitle>Quick Notepad</CardTitle>
+          <CardDescription className="text-yellow-100">Your notes are saved in your browser locally</CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          <textarea value={notes} onChange={e => save(e.target.value)} className="w-full h-[400px] p-8 border-none focus:outline-none resize-none bg-yellow-50/30 text-lg leading-relaxed text-gray-800 placeholder:text-yellow-200" placeholder="Start typing your notes here..." />
+        </CardContent>
+        <CardFooter className="bg-yellow-50 p-4 flex justify-between text-xs font-bold text-yellow-600 uppercase tracking-widest">
+          <span>Characters: {notes.length}</span>
+          <span>Auto-saved locally</span>
+        </CardFooter>
+      </Card>
+    </div>
+  );
+}
+
+function ColorToolsView() {
+  const [color, setColor] = useState("#4f46e5");
+  
+  const hexToRgb = (hex: string) => {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgb(${r}, ${g}, ${b})`;
+  };
+
+  return (
+    <div className="space-y-6">
+      <Link to="/" className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-pink-500">
+        <ArrowRightLeft className="w-4 h-4" />
+        Back to Home
+      </Link>
+      <Card className="rounded-3xl border-none shadow-xl overflow-hidden bg-white">
+        <CardHeader className="bg-pink-500 text-white">
+          <CardTitle>Color Tools</CardTitle>
+          <CardDescription className="text-pink-100">Pick colors and get codes</CardDescription>
+        </CardHeader>
+        <CardContent className="p-8 space-y-8">
+          <div className="flex flex-col md:flex-row gap-8 items-center">
+            <input type="color" value={color} onChange={e => setColor(e.target.value)} className="w-40 h-40 rounded-3xl border-none cursor-pointer overflow-hidden p-0 shadow-xl" />
+            <div className="flex-1 space-y-4 w-full">
+              <div className="p-4 bg-gray-50 rounded-2xl border-2 border-gray-100 flex justify-between items-center group">
+                <code className="text-xl font-mono font-bold text-gray-900">{color.toUpperCase()}</code>
+                <Button onClick={() => { navigator.clipboard.writeText(color.toUpperCase()); toast.success("Copied Hex!"); }} variant="ghost" className="rounded-xl opacity-0 group-hover:opacity-100 transition-opacity">Copy</Button>
+              </div>
+              <div className="p-4 bg-gray-50 rounded-2xl border-2 border-gray-100 flex justify-between items-center group">
+                <code className="text-xl font-mono font-bold text-gray-900">{hexToRgb(color)}</code>
+                <Button onClick={() => { navigator.clipboard.writeText(hexToRgb(color)); toast.success("Copied RGB!"); }} variant="ghost" className="rounded-xl opacity-0 group-hover:opacity-100 transition-opacity">Copy</Button>
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-5 gap-2">
+            {[0.2, 0.4, 0.6, 0.8, 1].map(o => (
+              <div key={o} className="h-16 rounded-xl shadow-inner border border-gray-100" style={{ backgroundColor: color, opacity: o }} />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function MarkdownPreviewView() {
+  const [text, setText] = useState("# Markdown Previewer\n\nStart writing markdown here and see the output on the right!\n\n- **Bold text**\n- *Italic text*\n- [Link](https://google.com)\n\n### Code example\n```ts\nconst hello = \"world\";\n```");
+
+  return (
+    <div className="space-y-6">
+      <Link to="/" className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-sky-600">
+        <ArrowRightLeft className="w-4 h-4" />
+        Back to Home
+      </Link>
+      <Card className="rounded-3xl border-none shadow-xl overflow-hidden bg-white">
+        <CardHeader className="bg-sky-600 text-white">
+          <CardTitle>Markdown Preview</CardTitle>
+          <CardDescription className="text-sky-100">Live markdown editor & previewer</CardDescription>
+        </CardHeader>
+        <CardContent className="p-0 border-t">
+          <div className="grid grid-cols-1 md:grid-cols-2 h-[500px]">
+            <textarea value={text} onChange={e => setText(e.target.value)} className="p-6 h-full border-r focus:outline-none resize-none font-mono text-sm bg-gray-50/50" placeholder="Type markdown here..." />
+            <div className="p-6 h-full overflow-y-auto prose prose-sm max-w-none prose-slate">
+              <ReactMarkdown>{text}</ReactMarkdown>
+            </div>
+          </div>
+        </CardContent>
       </Card>
     </div>
   );

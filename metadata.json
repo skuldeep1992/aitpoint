@@ -1,5 +1,5 @@
 {
   "name": "AiTpoint",
-  "description": "Universal AI-powered assistant with tools for Tax calculation, Unit conversion, Password generation, and Train tracking.",
+  "description": "Universal AI-powered assistant with tools for Tax, BMI, Age, EMI, and other utility calculations, plus Train tracking and Search GPT.",
   "requestFramePermissions": []
 }
