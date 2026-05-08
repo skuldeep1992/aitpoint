@@ -73,8 +73,8 @@ const CONVERSION_OPTIONS: ConversionOption[] = [
     id: "word-to-pdf", 
     label: "Word to PDF", 
     icon: FileText, 
-    accept: ".docx", 
-    description: "Convert Word to PDF." 
+    accept: ".docx,.doc", 
+    description: "Convert Word (.docx, .doc) to PDF." 
   },
   { 
     id: "xls-to-pdf", 
@@ -360,7 +360,23 @@ export default function App() {
       }
 
       const blob = await response.blob();
-      if (blob.size < 100) throw new Error("Received an invalid file");
+      console.log(`[Download] Received blob: size=${blob.size}, type=${blob.type}`);
+      
+      if (blob.size < 500) {
+        // Very small PDFs usually indicate an error message or empty page
+        const text = await blob.text();
+        if (text.startsWith("{") || text.includes("Error") || text.includes("error")) {
+          try {
+            const err = JSON.parse(text);
+            throw new Error(err.error || "The server returned an invalid file.");
+          } catch (e) {
+            // Not JSON, but maybe an error string
+            if (text.length < 100) throw new Error(text);
+          }
+        }
+      }
+
+      if (blob.size === 0) throw new Error("Received an empty file from the server.");
 
       const url = window.URL.createObjectURL(blob);
 

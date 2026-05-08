@@ -12,13 +12,19 @@ import * as XLSX from "xlsx";
 import { Document, Packer, Paragraph, TextRun } from "docx";
 import { PDFDocument as PDFLib, rgb, degrees } from "pdf-lib";
 import JSZip from "jszip";
+import WordExtractor from "word-extractor";
 import { createRequire } from "module";
 import dotenv from "dotenv";
 
 dotenv.config();
 
 const require = createRequire(import.meta.url);
-const pdfParse = require("pdf-parse");
+let pdfParse: any;
+try {
+  pdfParse = require("pdf-parse");
+} catch (e) {
+  console.error("Failed to load pdf-parse:", e);
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -79,52 +85,181 @@ async function startServer() {
       console.log(`[Conversion] Starting ${conversionType} for: ${firstFile?.originalname || url || "multiple files"}`);
       
       if (conversionType === "word-to-pdf" && firstFile) {
-        const { value: html } = await mammoth.convertToHtml({ buffer: firstFile.buffer });
-        const fullHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body { font-family: 'Times New Roman', serif; line-height: 1.6; padding: 40px; color: #333; } img { max-width: 100%; height: auto; display: block; margin: 10px 0; } table { border-collapse: collapse; width: 100%; margin: 15px 0; } th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }</style></head><body>${html || "<p>No content</p>"}</body></html>`;
+        let html = "";
+        try {
+          console.log(`[Word-to-PDF] Processing ${firstFile.originalname} (${firstFile.size} bytes)`);
+          
+          // Check for ZIP signature (PK..) - Required for .docx
+          const isDocx = firstFile.buffer.length >= 4 && firstFile.buffer.toString('hex', 0, 2) === '504b';
+          
+          if (isDocx) {
+            console.log("[Word-to-PDF] Detected modern .docx format");
+            const result = await mammoth.convertToHtml({ buffer: firstFile.buffer });
+            html = result.value;
+            console.log(`[Word-to-PDF] Mammoth conversion finished. HTML length: ${html?.length || 0}`);
+            if (result.messages.length > 0) {
+              console.log("[Mammoth Messages]:", result.messages);
+            }
+          } else {
+            console.log("[Word-to-PDF] Trying legacy .doc format with WordExtractor");
+            try {
+              const extractor = new WordExtractor();
+              const document = await extractor.extract(firstFile.buffer);
+              const content = document.getBody();
+              html = content.split(/\r?\n/).map(line => `<p>${line}</p>`).join('');
+              console.log(`[Word-to-PDF] WordExtractor conversion finished. HTML length: ${html?.length || 0}`);
+            } catch (extractorErr: any) {
+              if (extractorErr.message?.includes("Unable to read this type of file") || extractorErr.message?.includes("not a valid OLE file")) {
+                console.log("[Word-to-PDF] Not a valid .doc file, trying plain text fallback");
+                // Fallback for plain text or misinterpreted formats (like RTF renamed to .doc)
+                const textContent = firstFile.buffer.toString('utf8').replace(/[^\x20-\x7E\n\r\t]/g, '');
+                if (textContent.length > 10) {
+                  html = textContent.split(/\r?\n/).map(line => `<p>${line}</p>`).join('');
+                } else {
+                  throw extractorErr; // Re-throw if text fallback is too short/garbage
+                }
+              } else {
+                throw extractorErr;
+              }
+            }
+          }
+        } catch (e: any) {
+          console.error("Word Conversion Error:", e);
+          let message = "Failed to read Word document. ";
+          if (e.message?.includes("end of central directory")) {
+            message += "The file appears to be a corrupted .docx or a renamed file.";
+          } else if (e.message?.includes("Unable to read this type of file")) {
+            message += "The file format is not recognized. If it's a very old .doc or RTF, please try saving it as .docx first.";
+          } else {
+            message += e.message || "Unknown error";
+          }
+          throw new Error(message);
+        }
+
+        const fullHtml = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Converted Document</title>
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.6; 
+            padding: 40px; 
+            color: #000; 
+            background: #fff;
+            max-width: 800px;
+            margin: 0 auto;
+        } 
+        p { margin-bottom: 1em; white-space: pre-wrap; word-wrap: break-word; } 
+        img { max-width: 100%; height: auto; display: block; margin: 20px 0; } 
+        table { border-collapse: collapse; width: 100%; margin: 20px 0; } 
+        th, td { border: 1px solid #000; padding: 10px; text-align: left; }
+        th { background: #eee; }
+    </style>
+</head>
+<body>${html || "<p>No content found in document.</p>"}</body>
+</html>`;
         
         const pdfBuffer = await generatePdf(fullHtml, firstFile.buffer);
         res.setHeader("Content-Type", "application/pdf");
-        res.setHeader("Content-Disposition", `attachment; filename="${firstFile.originalname.replace(".docx", ".pdf")}"`);
-        return res.send(pdfBuffer);
+        res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(firstFile.originalname.replace(/\.[^/.]+$/, ".pdf"))}"`);
+        res.setHeader("Content-Length", pdfBuffer.length);
+        return res.status(200).send(pdfBuffer);
       } 
       
       else if (conversionType === "xls-to-pdf" && firstFile) {
-        const workbook = XLSX.read(firstFile.buffer, { type: "buffer" });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        const html = XLSX.utils.sheet_to_html(worksheet);
+        let html = "";
+        try {
+          const workbook = XLSX.read(firstFile.buffer, { type: "buffer" });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          html = XLSX.utils.sheet_to_html(worksheet);
+        } catch (e) {
+          console.error("Excel Error:", e);
+          throw new Error("Failed to read Excel file. Please ensure it's a valid .xlsx or .xls file.");
+        }
         
-        const fullHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body { font-family: sans-serif; padding: 20px; } table { border-collapse: collapse; width: 100%; font-size: 12px; } th, td { border: 1px solid #ccc; padding: 4px; text-align: left; } th { background: #f4f4f4; }</style></head><body>${html}</body></html>`;
+        const fullHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body { font-family: sans-serif; padding: 20px; } table { border-collapse: collapse; width: 100%; font-size: 12px; } th, td { border: 1px solid #ccc; padding: 4px; text-align: left; } th { background: #f4f4f4; }</style></head><body>${html || "<p>No content found in spreadsheet.</p>"}</body></html>`;
         
         const pdfBuffer = await generatePdf(fullHtml, firstFile.buffer);
-        res.setHeader("Content-Type", "application/pdf");
-        res.setHeader("Content-Disposition", `attachment; filename="${firstFile.originalname.replace(/\.[^/.]+$/, ".pdf")}"`);
+        res.type("application/pdf");
+        res.attachment(firstFile.originalname.replace(/\.[^/.]+$/, ".pdf"));
         return res.send(pdfBuffer);
       }
 
       else if (conversionType === "pdf-to-word" && firstFile) {
-        const data = await pdfParse(firstFile.buffer);
+        let pdfData: any;
+        
+        try {
+          if (typeof pdfParse === "function") {
+            // Classic pdf-parse (v1.1.1)
+            pdfData = await pdfParse(firstFile.buffer);
+            console.log(`[PDF-to-Word] Parsed using classic pdf-parse. Text length: ${pdfData?.text?.length || 0}`);
+          } else if (typeof pdfParse?.PDFParse === "function") {
+            // Modern pdf-parse (v2.x.x, e.g., mehmet-kozan/pdf-parse)
+            console.log("[PDF-to-Word] Detected modern PDFParse class");
+            const instance = new pdfParse.PDFParse(new Uint8Array(firstFile.buffer));
+            pdfData = await instance.getText();
+            console.log(`[PDF-to-Word] Parsed using modern PDFParse.getText(). Text length: ${pdfData?.text?.length || 0}`);
+          } else if (typeof pdfParse?.default === "function") {
+            // ESM-wrapped classic pdf-parse
+            pdfData = await pdfParse.default(firstFile.buffer);
+            console.log(`[PDF-to-Word] Parsed using pdfParse.default. Text length: ${pdfData?.text?.length || 0}`);
+          } else {
+            console.error("[PDF-to-Word] pdf-parse is not a recognized function or class. Type:", typeof pdfParse, "Keys:", Object.keys(pdfParse || {}));
+            throw new Error("PDF parsing tool is currently incorrectly configured on the server.");
+          }
+        } catch (parseErr: any) {
+          console.error("[PDF-to-Word] Parse error:", parseErr);
+          throw new Error(`Failed to extract text from PDF: ${parseErr.message || "Unknown parsing error"}`);
+        }
+
+        let rawText = (pdfData?.pages && Array.isArray(pdfData.pages)) 
+          ? pdfData.pages.map((p: any) => p.text).join("\n") 
+          : (pdfData?.text || "");
+
+        console.log(`[PDF-to-Word] Extracted sample: "${rawText.substring(0, 100).replace(/\n/g, "\\n")}..."`);
+
+        if (!rawText || rawText.trim().length === 0) {
+          console.warn("[PDF-to-Word] No text extracted. PDF might be scanned or image-based.");
+          rawText = "Note: This PDF appears to be scanned or contains only images. AiTpoint could not extract text from this document for the conversion. Please try a searchable PDF.";
+        }
+        
+        // Sanitize text for XML/Word compatibility (remove control characters except \n, \r, \t)
+        const docText = rawText.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+        console.log(`[PDF-to-Word] Final docText sanitized length: ${docText.length}`);
+        
         const doc = new Document({
           sections: [{
             properties: {},
-            children: data.text.split("\n").map(line => 
-              new Paragraph({
-                children: [new TextRun(line)],
-              })
-            ),
+            children: docText.split(/\r?\n/).map(line => {
+              const trimmed = line.trimEnd();
+              if (!trimmed) {
+                return new Paragraph({ children: [] });
+              }
+              return new Paragraph({
+                children: [new TextRun(trimmed)],
+              });
+            }),
           }],
         });
 
         const docxBuffer = await Packer.toBuffer(doc);
+        const finalBuffer = Buffer.from(docxBuffer);
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
-        res.setHeader("Content-Disposition", `attachment; filename="${firstFile.originalname.replace(".pdf", ".docx")}"`);
-        return res.send(docxBuffer);
+        res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(firstFile.originalname.replace(/\.pdf$/i, ".docx"))}"`);
+        res.setHeader("Content-Length", finalBuffer.length);
+        console.log(`[PDF-to-Word] Sending DOCX buffer: ${finalBuffer.length} bytes`);
+        return res.status(200).send(finalBuffer);
       }
 
       else if (conversionType === "url-to-pdf" && url) {
         const pdfBuffer = await generatePdf("", Buffer.from(""), url);
-        res.setHeader("Content-Type", "application/pdf");
-        res.setHeader("Content-Disposition", `attachment; filename="website.pdf"`);
+        res.type("application/pdf");
+        res.attachment("website.pdf");
         return res.send(pdfBuffer);
       }
 
@@ -136,8 +271,8 @@ async function startServer() {
           copiedPages.forEach((page) => mergedPdf.addPage(page));
         }
         const pdfBytes = await mergedPdf.save();
-        res.setHeader("Content-Type", "application/pdf");
-        res.setHeader("Content-Disposition", `attachment; filename="merged.pdf"`);
+        res.type("application/pdf");
+        res.attachment("merged.pdf");
         return res.send(Buffer.from(pdfBytes));
       }
 
@@ -152,8 +287,8 @@ async function startServer() {
           zip.file(`page_${i + 1}.pdf`, pdfBytes);
         }
         const zipBuffer = await zip.generateAsync({ type: "nodebuffer" });
-        res.setHeader("Content-Type", "application/zip");
-        res.setHeader("Content-Disposition", `attachment; filename="split_pages.zip"`);
+        res.type("application/zip");
+        res.attachment("split_pages.zip");
         return res.send(zipBuffer);
       }
 
@@ -165,8 +300,8 @@ async function startServer() {
           page.setRotation(degrees((currentRotation + rotation) % 360));
         });
         const pdfBytes = await pdf.save();
-        res.setHeader("Content-Type", "application/pdf");
-        res.setHeader("Content-Disposition", `attachment; filename="rotated.pdf"`);
+        res.type("application/pdf");
+        res.attachment("rotated.pdf");
         return res.send(Buffer.from(pdfBytes));
       }
 
@@ -199,46 +334,90 @@ async function startServer() {
           }
         }
         const pdfBytes = await pdfDoc.save();
-        res.setHeader("Content-Type", "application/pdf");
-        res.setHeader("Content-Disposition", `attachment; filename="images_to.pdf"`);
+        res.type("application/pdf");
+        res.attachment("images_to.pdf");
         return res.send(Buffer.from(pdfBytes));
       }
 
       res.status(400).json({ error: "Unsupported conversion type or missing data" });
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("[Conversion] FATAL ERROR:", error);
-      res.status(500).json({ error: "Failed to convert document", details: error instanceof Error ? error.message : String(error) });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      res.status(500).json({ 
+        error: errorMessage,
+        details: errorMessage 
+      });
     } finally {
       if (browser) await browser.close().catch(err => console.error(err));
     }
 
     async function generatePdf(html: string, originalBuffer: Buffer, targetUrl?: string): Promise<Buffer> {
       try {
+        console.log(`[Puppeteer] Launching for ${targetUrl || "HTML Content"}`);
         browser = await puppeteer.launch({
-          args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--no-zygote", "--single-process"],
+          args: [
+            "--no-sandbox", 
+            "--disable-setuid-sandbox", 
+            "--disable-dev-shm-usage", 
+            "--disable-gpu", 
+            "--no-zygote", 
+            "--disable-extensions",
+            "--font-render-hinting=none",
+            "--single-process"
+          ],
           headless: true,
+          executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
         });
         const page = await browser.newPage();
+        
+        // Emulate screen to avoid mobile layouts
+        await page.setViewport({ width: 1240, height: 1754, deviceScaleFactor: 1 });
+
         if (targetUrl) {
           await page.goto(targetUrl, { waitUntil: "networkidle0", timeout: 60000 });
         } else {
-          await page.setContent(html, { waitUntil: "domcontentloaded" });
+          await page.setContent(html, { waitUntil: "networkidle0" });
         }
-        const pdf = await page.pdf({ format: "A4", margin: { top: "10mm", right: "10mm", bottom: "10mm", left: "10mm" }, printBackground: true });
-        if (pdf && pdf.slice(0, 4).toString() === "%PDF") return pdf;
-        throw new Error("Invalid PDF");
+        
+        // Wait a bit for layout to settle
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        const pdfByteArray = await page.pdf({ 
+          format: "A4", 
+          margin: { top: "15mm", right: "15mm", bottom: "15mm", left: "15mm" }, 
+          printBackground: true,
+          preferCSSPageSize: true
+        });
+        
+        const pdfBuffer = Buffer.from(pdfByteArray);
+        if (pdfBuffer.length > 100 && pdfBuffer.toString('utf8', 0, 4) === "%PDF") {
+          console.log(`[Puppeteer] Successfully generated PDF (${pdfBuffer.length} bytes)`);
+          return pdfBuffer;
+        }
+        throw new Error("Puppeteer produced invalid PDF data");
       } catch (e) {
-        if (targetUrl) throw e; // Fallback doesn't make sense for URL
-        console.warn("Puppeteer failed, using PDFKit fallback");
-        const { value: text } = await mammoth.extractRawText({ buffer: originalBuffer }).catch(() => ({ value: html.replace(/<[^>]*>/g, "") }));
+        console.warn("[Puppeteer] Failed, using PDFKit fallback:", e instanceof Error ? e.message : String(e));
+        
+        let textContent = "";
+        try {
+          const { value } = await mammoth.extractRawText({ buffer: originalBuffer });
+          textContent = value;
+        } catch (mErr) {
+          textContent = html.replace(/<[^>]*>/g, "");
+        }
+
         return await new Promise<Buffer>((resolve, reject) => {
           const doc = new PDFDocument();
           const chunks: Buffer[] = [];
           doc.on("data", (c) => chunks.push(c));
-          doc.on("end", () => resolve(Buffer.concat(chunks)));
+          doc.on("end", () => {
+            const result = Buffer.concat(chunks);
+            console.log(`[PDFKit] Fallback PDF generated (${result.length} bytes)`);
+            resolve(result);
+          });
           doc.on("error", reject);
-          doc.fontSize(10).text(text);
+          doc.fontSize(11).text(textContent || "Document content could not be extracted.");
           doc.end();
         });
       }
