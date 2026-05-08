@@ -310,6 +310,87 @@ const UTILITY_TOOLS = [
   }
 ];
 
+
+function SEO({ title, description }: { title: string; description: string }) {
+  React.useEffect(() => {
+    document.title = `${title} | AiTpoint - Smart AI & Utility Tools`;
+    const metaDesc = document.querySelector('meta[name="description"]');
+    if (metaDesc) {
+      metaDesc.setAttribute("content", description);
+    } else {
+      const meta = document.createElement("meta");
+      meta.name = "description";
+      meta.content = description;
+      document.head.appendChild(meta);
+    }
+  }, [title, description]);
+  return null;
+}
+
+function ToolIndexView() {
+  return (
+    <div className="space-y-12 py-8">
+      <SEO 
+        title="All AI & Utility Tools" 
+        description="Comprehensive list of AI search, generators, converters, and calculators. Everything you need in one powerful toolkit." 
+      />
+      
+      <div className="text-center space-y-4 max-w-2xl mx-auto">
+        <h1 className="text-4xl md:text-5xl font-black text-gray-900 tracking-tight">
+          Every <span className="text-red-600">Tool</span> You Need
+        </h1>
+        <p className="text-lg text-gray-500 font-medium leading-relaxed">
+          The ultimate collection of AI assistants, PDF tools, and native utilities. Fast, free, and optimized for indexing.
+        </p>
+      </div>
+
+      <div className="space-y-10">
+        <section className="space-y-6">
+          <div className="flex items-center gap-3 px-4 py-2 border-l-4 border-red-600 bg-red-50/50 rounded-r-xl">
+            <Sparkles className="w-5 h-5 text-red-600" />
+            <h2 className="text-xl font-bold text-gray-900 uppercase tracking-wider">AI Powered Tools</h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {AI_TOOLS.map((tool) => (
+              <ToolCard key={tool.id} tool={tool} pathPrefix="/ai" />
+            ))}
+          </div>
+        </section>
+
+        <section className="space-y-6">
+          <div className="flex items-center gap-3 px-4 py-2 border-l-4 border-gray-900 bg-gray-100 rounded-r-xl">
+            <Calculator className="w-5 h-5 text-gray-900" />
+            <h2 className="text-xl font-bold text-gray-900 uppercase tracking-wider">Utility & Calculators</h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {UTILITY_TOOLS.map((tool) => (
+              <ToolCard key={tool.id} tool={tool} pathPrefix="/tools" />
+            ))}
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function ToolCard({ tool, pathPrefix }: { tool: any, pathPrefix?: string }) {
+  return (
+    <Link 
+      to={`${pathPrefix}/${tool.id}`}
+      className="group relative bg-white rounded-3xl p-6 shadow-sm border border-gray-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-300"
+    >
+      <div className={cn("inline-flex p-3 rounded-2xl text-white shadow-lg mb-4 group-hover:scale-110 transition-transform", tool.color)}>
+        <tool.icon className="w-6 h-6" />
+      </div>
+      <h3 className="text-lg font-black text-gray-900 mb-2 truncate group-hover:text-red-600 transition-colors">{tool.label}</h3>
+      <p className="text-sm text-gray-500 font-medium leading-relaxed line-clamp-2">{tool.description}</p>
+      <div className="mt-4 flex items-center text-xs font-bold text-gray-400 group-hover:text-red-500 transition-colors">
+        Try Tool <ArrowRightLeft className="w-3 h-3 ml-2 group-hover:translate-x-1 transition-transform" />
+      </div>
+    </Link>
+  );
+}
+
 export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -327,7 +408,14 @@ export default function App() {
   const [targetLang, setTargetLang] = useState("English");
   const [sourceLang, setSourceLang] = useState("Auto-detect");
 
-  const activeTab = location.pathname.startsWith("/ai") ? "ai-agent" : "home";
+  const [activeTab, setActiveTab] = useState("home");
+
+  React.useEffect(() => {
+    if (location.pathname === "/") setActiveTab("home");
+    else if (location.pathname.startsWith("/ai")) setActiveTab("ai-agent");
+    else if (location.pathname.startsWith("/tools")) setActiveTab("tools");
+    else setActiveTab("");
+  }, [location.pathname]);
 
   React.useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -562,6 +650,7 @@ export default function App() {
               AiTpoint
             </Link>
 
+
             <div className="hidden md:flex items-center gap-1">
               <Link 
                 to="/"
@@ -581,8 +670,19 @@ export default function App() {
                   activeTab === "ai-agent" ? "bg-red-50 text-red-600" : "text-gray-600 hover:bg-gray-50"
                 )}
               >
-                <Bot className="w-4 h-4" />
+                <Sparkles className="w-4 h-4" />
                 AI Agent
+              </Link>
+
+              <Link 
+                to="/tools"
+                className={cn(
+                  "px-4 py-2 rounded-xl text-sm font-bold transition-colors flex items-center gap-2",
+                  activeTab === "tools" ? "bg-red-50 text-red-600" : "text-gray-600 hover:bg-gray-50"
+                )}
+              >
+                <Wrench className="w-4 h-4" />
+                Tools
               </Link>
 
               <div className="relative">
@@ -594,7 +694,7 @@ export default function App() {
                   )}
                 >
                   <LayoutGrid className="w-4 h-4" />
-                  ALL PDF Tools
+                  PDF Tools
                   <ChevronDown className={cn("w-4 h-4 transition-transform", isMenuOpen && "rotate-180")} />
                 </button>
 
@@ -710,6 +810,7 @@ export default function App() {
         <div className="w-full max-w-3xl space-y-8">
           <Routes>
             <Route path="/" element={<HomeView setConversionType={setConversionType} setFileState={setFileState} />} />
+            <Route path="/tools" element={<ToolIndexView />} />
             <Route path="/pdf/:toolId" element={<PdfToolView conversionType={conversionType} setConversionType={setConversionType} fileState={fileState} setFileState={setFileState} urlInput={urlInput} setUrlInput={setUrlInput} handleConvert={handleConvert} handleFileChange={handleFileChange} handleDrop={handleDrop} rotation={rotation} setRotation={setRotation} reset={reset} />} />
             <Route path="/ai" element={<AiAgentHomeView />} />
             <Route path="/ai/train-status" element={<TrainStatusView handleAiAction={handleAiAction} isAiLoading={isAiLoading} aiOutput={aiOutput} setAiOutput={setAiOutput} />} />
@@ -751,19 +852,26 @@ function HomeView({ setConversionType, setFileState }: { setConversionType: (t: 
 
   return (
     <>
-      <header className="text-center space-y-2">
+      <SEO 
+        title="Home - AI Smart Tools & PDF Utilities" 
+        description="AiTpoint is your universal assistant for web search, content generation, PDF utilities, and local calculators. All tools work fast and are SEO optimized." 
+      />
+      <header className="text-center space-y-4 max-w-2xl mx-auto">
         <motion.div 
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          className="inline-flex items-center justify-center w-16 h-16 rounded-3xl bg-red-600 text-white mb-4 shadow-xl"
+          className="inline-flex items-center justify-center w-16 h-16 rounded-3xl bg-red-600 text-white mb-2 shadow-xl"
         >
           <Bot className="w-8 h-8" />
         </motion.div>
-        <h1 className="text-4xl font-bold tracking-tight text-gray-900">AiTpoint</h1>
-        <p className="text-gray-500 font-medium">Your universal AI-powered assistant</p>
+        <h1 className="text-5xl font-black tracking-tight text-gray-900 leading-tight">
+          Everything <span className="text-red-600">Automatic.</span>
+        </h1>
+        <p className="text-lg text-gray-500 font-medium leading-relaxed">
+          The ultimate collection of AI assistants, PDF tools, and native utilities. Fast, free, and optimized for your daily needs.
+        </p>
       </header>
 
-      {/* Custom Search GPT Bar */}
       <div className="max-w-2xl mx-auto w-full pt-4">
         <form onSubmit={handleSearch} className="relative group">
           <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none">
@@ -771,7 +879,7 @@ function HomeView({ setConversionType, setFileState }: { setConversionType: (t: 
           </div>
           <input
             type="text"
-            placeholder="Ask Search GPT anything..."
+            placeholder="Search GPT - Ask anything with real-time web results..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="block w-full pl-12 pr-24 py-5 bg-white border-2 border-gray-100 rounded-2xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-red-600 focus:ring-4 focus:ring-red-50 shadow-sm transition-all"
@@ -785,83 +893,62 @@ function HomeView({ setConversionType, setFileState }: { setConversionType: (t: 
             </Button>
           </div>
         </form>
-        <div className="flex flex-wrap justify-center gap-2 mt-4">
-          {["Latest news", "Weather today", "Stock market", "AI trends"].map((tag) => (
-            <button
-              key={tag}
-              onClick={() => {
-                setSearchQuery(tag);
-                navigate(`/ai/search-gpt?q=${encodeURIComponent(tag)}`);
-              }}
-              className="px-3 py-1.5 bg-white border border-gray-100 rounded-full text-xs font-bold text-gray-500 hover:bg-red-50 hover:text-red-600 hover:border-red-100 transition-all shadow-sm"
-            >
-              {tag}
-            </button>
-          ))}
-        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pt-8">
-        {AI_TOOLS.map((tool) => (
-          <Link
-            key={tool.id}
-            to={`/ai/${tool.id}`}
-            className="group relative flex flex-col p-8 rounded-3xl bg-white border border-gray-100 shadow-sm hover:shadow-xl transition-all text-left overflow-hidden"
-          >
-            <div className={cn("absolute top-0 right-0 w-32 h-32 -mr-8 -mt-8 rounded-full opacity-5 transition-transform group-hover:scale-110", tool.color)} />
-            <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center text-white mb-6 shadow-lg", tool.color)}>
-              <tool.icon className="w-7 h-7" />
-            </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-2">{tool.label}</h3>
-            <p className="text-sm text-gray-500 leading-relaxed">{tool.description}</p>
-            <div className="mt-6 flex items-center text-sm font-bold text-gray-900 group-hover:text-red-600 transition-colors">
-              Try now
-              <ArrowRightLeft className="w-4 h-4 ml-2 rotate-180" />
-            </div>
-          </Link>
-        ))}
-      </div>
-
-      <div className="pt-12">
-        <div className="flex items-center gap-3 mb-8">
-          <Wrench className="w-6 h-6 text-indigo-600" />
-          <h2 className="text-2xl font-bold text-gray-900">Utility Tools</h2>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {UTILITY_TOOLS.map((tool) => (
-            <Link
-              key={tool.id}
-              to={`/tools/${tool.id}`}
-              className="group flex items-center gap-6 p-6 rounded-3xl bg-white border border-gray-100 shadow-sm hover:shadow-xl transition-all text-left"
-            >
-              <div className={cn("w-16 h-16 rounded-2xl flex items-center justify-center text-white shadow-lg shrink-0", tool.color)}>
-                <tool.icon className="w-8 h-8" />
-              </div>
-              <div className="flex-1">
-                <h3 className="text-lg font-bold text-gray-900 mb-1">{tool.label}</h3>
-                <p className="text-sm text-gray-500">{tool.description}</p>
-              </div>
-              <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-all">
-                <ArrowRightLeft className="w-5 h-5 rotate-180" />
-              </div>
+      <div className="space-y-12 pt-12">
+        <section className="space-y-8">
+          <div className="flex items-center justify-between px-2">
+            <h2 className="text-2xl font-black text-gray-900">AI Agents</h2>
+            <Link to="/ai">
+              <Button variant="ghost" className="text-red-600 font-bold hover:bg-red-50 rounded-xl">
+                Explore All AI
+              </Button>
             </Link>
-          ))}
-        </div>
-      </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {AI_TOOLS.slice(0, 3).map((tool) => (
+              <ToolCard key={tool.id} tool={tool} pathPrefix="/ai" />
+            ))}
+          </div>
+        </section>
 
-      <div className="grid grid-cols-3 gap-8 text-center pt-8">
-        <div className="space-y-2">
-          <div className="text-gray-900 font-medium">Fast</div>
-          <div className="text-[10px] text-gray-400 uppercase tracking-widest">Instant Processing</div>
-        </div>
-        <div className="space-y-2">
-          <div className="text-gray-900 font-medium">Secure</div>
-          <div className="text-[10px] text-gray-400 uppercase tracking-widest">Encrypted Transfer</div>
-        </div>
-        <div className="space-y-2">
-          <div className="text-gray-900 font-medium">Free</div>
-          <div className="text-[10px] text-gray-400 uppercase tracking-widest">No Subscriptions</div>
-        </div>
+        <section className="space-y-8">
+          <div className="flex items-center justify-between px-2">
+            <h2 className="text-2xl font-black text-gray-900">PDF & File Tools</h2>
+            <div className="text-xs font-bold text-gray-400 uppercase tracking-widest">8+ Utilities</div>
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {CONVERSION_OPTIONS.slice(0, 8).map((option) => (
+              <Link 
+                key={option.id}
+                to={`/pdf/${option.id}`}
+                onClick={() => setConversionType(option.id)}
+                className="flex flex-col items-center justify-center p-6 bg-white rounded-3xl border border-gray-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group"
+              >
+                <div className="w-12 h-12 rounded-2xl bg-gray-50 flex items-center justify-center text-gray-400 group-hover:bg-red-50 group-hover:text-red-600 transition-all mb-4">
+                  <option.icon className="w-6 h-6" />
+                </div>
+                <span className="text-sm font-bold text-gray-900 group-hover:text-red-600 transition-colors text-center">{option.label}</span>
+              </Link>
+            ))}
+          </div>
+        </section>
+
+        <section className="space-y-8 pb-12">
+          <div className="flex items-center justify-between px-2">
+            <h2 className="text-2xl font-black text-gray-900">Utility Calculators</h2>
+            <Link to="/tools">
+              <Button variant="ghost" className="text-red-600 font-bold hover:bg-red-50 rounded-xl">
+                Browser Tools
+              </Button>
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {UTILITY_TOOLS.slice(0, 3).map((tool) => (
+              <ToolCard key={tool.id} tool={tool} pathPrefix="/tools" />
+            ))}
+          </div>
+        </section>
       </div>
     </>
   );
@@ -892,7 +979,12 @@ function PdfToolView({
   const currentOption = CONVERSION_OPTIONS.find(o => o.id === (toolId || conversionType))!;
 
   return (
-    <AnimatePresence mode="wait">
+    <div className="space-y-6">
+      <SEO 
+        title={`${currentOption.label} - Online PDF Tool`}
+        description={`Fast and free ${currentOption.label} tool. Process your PDF documents instantly in your browser with AiTpoint's secure PDF utilities.`}
+      />
+      <AnimatePresence mode="wait">
       {!fileState ? (
         <motion.div
           key="selection"
@@ -1119,49 +1211,32 @@ function PdfToolView({
         </motion.div>
       )}
     </AnimatePresence>
+    </div>
   );
 }
 
 function AiAgentHomeView() {
   return (
-    <motion.div
-      key="ai-agent"
-      initial={{ opacity: 0, x: 20 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: -20 }}
-      className="space-y-8"
-    >
+    <div className="space-y-12">
+      <SEO 
+        title="AI Agent Center - Gemini Powered Assistants" 
+        description="Access multiple specialized AI agents for content generation, image creation, language translation, and real-time data search." 
+      />
+      
       <div className="text-center space-y-4">
         <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-red-50 text-red-600 mb-2">
           <Sparkles className="w-10 h-10" />
         </div>
-        <h2 className="text-3xl font-bold text-gray-900">AI Document Agent</h2>
-        <p className="text-gray-500 max-w-lg mx-auto">
-          Select an AI tool to get started. Our advanced agents can generate content, images, videos, and more.
-        </p>
+        <h1 className="text-4xl md:text-5xl font-black text-gray-900 tracking-tight">AI Agent <span className="text-red-600">Hub</span></h1>
+        <p className="text-lg text-gray-500 font-medium max-w-xl mx-auto">Master any task with our fleet of specialized AI agents. Creative, logical, and always ready to help.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {AI_TOOLS.map((tool) => (
-          <Link
-            key={tool.id}
-            to={`/ai/${tool.id}`}
-            className="group relative flex flex-col p-8 rounded-3xl bg-white border border-gray-100 shadow-sm hover:shadow-xl transition-all text-left overflow-hidden"
-          >
-            <div className={cn("absolute top-0 right-0 w-32 h-32 -mr-8 -mt-8 rounded-full opacity-5 transition-transform group-hover:scale-110", tool.color)} />
-            <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center text-white mb-6 shadow-lg", tool.color)}>
-              <tool.icon className="w-7 h-7" />
-            </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-2">{tool.label}</h3>
-            <p className="text-sm text-gray-500 leading-relaxed">{tool.description}</p>
-            <div className="mt-6 flex items-center text-sm font-bold text-gray-900 group-hover:text-red-600 transition-colors">
-              Try now
-              <ArrowRightLeft className="w-4 h-4 ml-2 rotate-180" />
-            </div>
-          </Link>
+          <ToolCard key={tool.id} tool={tool} pathPrefix="/ai" />
         ))}
       </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -1312,7 +1387,11 @@ function TaxCalculatorView() {
 
   return (
     <div className="space-y-6">
-      <Link to="/ai" className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-indigo-600 transition-colors">
+      <SEO 
+        title="Income Tax Calculator 2024-25 - Old vs New Regime"
+        description="Calculate your income tax for the latest financial year. Compare old vs new regime automatically and save your taxes with AiTpoint."
+      />
+      <Link to="/tools" className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-indigo-600 transition-colors">
         <ArrowRightLeft className="w-4 h-4" />
         Back to all tools
       </Link>
@@ -1611,6 +1690,10 @@ function TrainStatusView({ handleAiAction, isAiLoading, aiOutput, setAiOutput }:
 
   return (
     <div className="space-y-6">
+      <SEO 
+        title="Live Train Running Status - Indian Railways" 
+        description="Check real-time train status, platform location, and delays. Indian Railways live train tracking by AiTpoint." 
+      />
       <Link 
         to="/ai"
         className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-red-600 transition-colors"
@@ -1782,9 +1865,13 @@ function UnitConverterView() {
 
   return (
     <div className="space-y-6">
-      <Link to="/" className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-teal-600">
+      <SEO 
+        title="Unit Converter - Length, Weight, Temperature" 
+        description="Convert instantly between Meters, Feet, KG, LBS, Celsius, Fahrenheit and more. Simple and fast online unit converter." 
+      />
+      <Link to="/tools" className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-teal-600">
         <ArrowRightLeft className="w-4 h-4" />
-        Back to Home
+        Back to all tools
       </Link>
       <Card className="rounded-3xl border-none shadow-xl overflow-hidden bg-white">
         <CardHeader className="bg-teal-600 text-white">
@@ -1904,6 +1991,10 @@ function AiToolView({
 
   return (
     <div className="space-y-6">
+      <SEO 
+        title={`${tool.label} - Gemini AI Agent`}
+        description={tool.description}
+      />
       <Link 
         to="/ai"
         className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-red-600 transition-colors"
