@@ -1,5 +1,5 @@
 {
   "name": "AiTpoint",
-  "description": "Universal AI-powered assistant with Search GPT, image generation, and more.",
+  "description": "Universal AI-powered assistant with tools for Tax calculation, Unit conversion, Password generation, and Train tracking.",
   "requestFramePermissions": []
 }

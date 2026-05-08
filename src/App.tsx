@@ -48,6 +48,7 @@ import { cn } from "@/lib/utils";
 import { GoogleGenAI } from "@google/genai";
 import { auth, db, googleProvider, signInWithPopup, signOut, onAuthStateChanged, User } from "./firebase";
 import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
 
 type ConversionType = 
   | "word-to-pdf" 
@@ -1074,214 +1075,388 @@ function AiAgentHomeView() {
   );
 }
 
+type AgeGroup = "Below 60" | "60 to 80" | "Above 80";
+
+interface IncomeDetails {
+  salary: number;
+  rent: number;
+  interest: number;
+  other: number;
+  digitalAssets: number;
+}
+
+interface DeductionDetails {
+  section80C: number;
+  section80D: number;
+  nps: number;
+  homeLoanInterest: number;
+  section80TTA: number;
+  others: number;
+}
+
 function TaxCalculatorView() {
-  const [income, setIncome] = useState<string>("");
-  const [deductions, setDeductions] = useState<string>(""); // For Old Regime
-  const [results, setResults] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState<"income" | "deductions" | "summary">("income");
+  const [ageGroup, setAgeGroup] = useState<AgeGroup>("Below 60");
+  
+  const [income, setIncome] = useState<IncomeDetails>({
+    salary: 0,
+    rent: 0,
+    interest: 0,
+    other: 0,
+    digitalAssets: 0
+  });
 
-  const calculateTax = () => {
-    const grossIncome = parseFloat(income) || 0;
-    const oldDeductions = parseFloat(deductions) || 0;
+  const [deductions, setDeductions] = useState<DeductionDetails>({
+    section80C: 0,
+    section80D: 0,
+    nps: 0,
+    homeLoanInterest: 0,
+    section80TTA: 0,
+    others: 0
+  });
 
-    // --- Old Regime Calculation ---
-    const oldStdDeduction = 50000;
-    const oldTaxableIncome = Math.max(0, grossIncome - oldStdDeduction - oldDeductions);
-    let oldTax = 0;
+  const handleIncomeChange = (field: keyof IncomeDetails, value: string) => {
+    setIncome(prev => ({ ...prev, [field]: parseFloat(value) || 0 }));
+  };
 
-    if (oldTaxableIncome > 1000000) {
-      oldTax += (oldTaxableIncome - 1000000) * 0.3;
-      oldTax += 500000 * 0.2;
-      oldTax += 250000 * 0.05;
-    } else if (oldTaxableIncome > 500000) {
-      oldTax += (oldTaxableIncome - 500000) * 0.2;
-      oldTax += 250000 * 0.05;
-    } else if (oldTaxableIncome > 250000) {
-      oldTax += (oldTaxableIncome - 250000) * 0.05;
-    }
+  const handleDeductionChange = (field: keyof DeductionDetails, value: string) => {
+    setDeductions(prev => ({ ...prev, [field]: parseFloat(value) || 0 }));
+  };
 
-    // Rebate u/s 87A for Old Regime
-    if (oldTaxableIncome <= 500000) {
-      oldTax = Math.max(0, oldTax - 12500);
-    }
-    const oldCess = oldTax * 0.04;
-    const totalOldTax = oldTax + oldCess;
+  const calculateOldTax = (taxableIncome: number, age: AgeGroup) => {
+    let tax = 0;
+    let exemption = 250000;
+    if (age === "60 to 80") exemption = 300000;
+    if (age === "Above 80") exemption = 500000;
 
-    // --- New Regime Calculation (FY 2024-25) ---
-    const newStdDeduction = 75000;
-    const newTaxableIncome = Math.max(0, grossIncome - newStdDeduction);
-    let newTax = 0;
+    if (taxableIncome <= exemption) return 0;
 
-    if (newTaxableIncome > 1500000) {
-      newTax += (newTaxableIncome - 1500000) * 0.3;
-      newTax += 300000 * 0.2;
-      newTax += 200000 * 0.15;
-      newTax += 300000 * 0.1;
-      newTax += 400000 * 0.05;
-    } else if (newTaxableIncome > 1200000) {
-      newTax += (newTaxableIncome - 1200000) * 0.2;
-      newTax += 200000 * 0.15;
-      newTax += 300000 * 0.1;
-      newTax += 400000 * 0.05;
-    } else if (newTaxableIncome > 1000000) {
-      newTax += (newTaxableIncome - 1000000) * 0.15;
-      newTax += 300000 * 0.1;
-      newTax += 400000 * 0.05;
-    } else if (newTaxableIncome > 700000) {
-      newTax += (newTaxableIncome - 700000) * 0.1;
-      newTax += 400000 * 0.05;
-    } else if (newTaxableIncome > 300000) {
-      newTax += (newTaxableIncome - 300000) * 0.05;
-    }
-
-    // Rebate u/s 87A for New Regime (up to 7L)
-    if (newTaxableIncome <= 700000) {
-      newTax = Math.max(0, newTax - 25000);
-    }
-    const newCess = newTax * 0.04;
-    const totalNewTax = newTax + newCess;
-
-    setResults({
-      old: {
-        taxable: oldTaxableIncome,
-        tax: oldTax,
-        cess: oldCess,
-        total: totalOldTax
-      },
-      new: {
-        taxable: newTaxableIncome,
-        tax: newTax,
-        cess: newCess,
-        total: totalNewTax
+    if (age === "Above 80") {
+      if (taxableIncome > 1000000) {
+        tax += (taxableIncome - 1000000) * 0.3;
+        tax += (1000000 - 500000) * 0.2;
+      } else {
+        tax += (taxableIncome - 500000) * 0.2;
       }
-    });
+    } else {
+      if (taxableIncome > 1000000) {
+        tax += (taxableIncome - 1000000) * 0.3;
+        tax += (1000000 - 500000) * 0.2;
+        tax += (500000 - exemption) * 0.05;
+      } else if (taxableIncome > 500000) {
+        tax += (taxableIncome - 500000) * 0.2;
+        tax += (500000 - exemption) * 0.05;
+      } else {
+        tax += (taxableIncome - exemption) * 0.05;
+      }
+    }
+
+    if (taxableIncome <= 500000) {
+      tax = Math.max(0, tax - 12500);
+    }
+    return tax;
+  };
+
+  const calculateNewTax = (taxableIncome: number) => {
+    if (taxableIncome <= 300000) return 0;
+    let tax = 0;
+    if (taxableIncome > 1500000) {
+      tax += (taxableIncome - 1500000) * 0.3;
+      tax += 300000 * 0.2;
+      tax += 200000 * 0.15;
+      tax += 300000 * 0.1;
+      tax += 400000 * 0.05;
+    } else if (taxableIncome > 1200000) {
+      tax += (taxableIncome - 1200000) * 0.2;
+      tax += 200000 * 0.15;
+      tax += 300000 * 0.1;
+      tax += 400000 * 0.05;
+    } else if (taxableIncome > 1000000) {
+      tax += (taxableIncome - 1000000) * 0.15;
+      tax += 300000 * 0.1;
+      tax += 400000 * 0.05;
+    } else if (taxableIncome > 700000) {
+      tax += (taxableIncome - 700000) * 0.1;
+      tax += 400000 * 0.05;
+    } else {
+      tax += (taxableIncome - 300000) * 0.05;
+    }
+
+    if (taxableIncome <= 700000) {
+      tax = Math.max(0, tax - 25000);
+    }
+    return tax;
+  };
+
+  const totalGrossIncome = (Object.values(income) as number[]).reduce((a, b) => a + b, 0);
+  
+  // Old Regime Summary
+  const oldStdDeduction = 50000;
+  const oldTotalDeductions = Math.min(income.salary, oldStdDeduction) + 
+                            Math.min(150000, deductions.section80C) + 
+                            deductions.section80D + 
+                            Math.min(50000, deductions.nps) + 
+                            deductions.homeLoanInterest + 
+                            Math.min(10000, deductions.section80TTA) + 
+                            deductions.others;
+  const oldTaxableIncome = Math.max(0, totalGrossIncome - oldTotalDeductions);
+  const oldBaseTax = calculateOldTax(oldTaxableIncome, ageGroup);
+  const oldTotalTax = oldBaseTax * 1.04;
+
+  // New Regime Summary
+  const newStdDeduction = 75000;
+  const newTotalDeductions = Math.min(income.salary, newStdDeduction);
+  const newTaxableIncome = Math.max(0, totalGrossIncome - newTotalDeductions);
+  const newBaseTax = calculateNewTax(newTaxableIncome);
+  const newTotalTax = newBaseTax * 1.04;
+
+  const getCheaperRegime = () => {
+    if (newTotalTax < oldTotalTax) return "New Regime";
+    if (oldTotalTax < newTotalTax) return "Old Regime";
+    return "Both are same";
+  };
+
+  const formatCurrency = (val: number) => {
+    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(val);
   };
 
   return (
     <div className="space-y-6">
-      <Link 
-        to="/ai"
-        className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-red-600 transition-colors"
-      >
+      <Link to="/ai" className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-indigo-600 transition-colors">
         <ArrowRightLeft className="w-4 h-4" />
         Back to all tools
       </Link>
 
       <Card className="border-none shadow-2xl rounded-3xl bg-white overflow-hidden">
         <CardHeader className="bg-indigo-600 text-white p-8">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center">
-              <Calculator className="w-6 h-6" />
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center backdrop-blur-sm">
+                <Calculator className="w-8 h-8" />
+              </div>
+              <div>
+                <CardTitle className="text-3xl font-black">Income Tax Calculator</CardTitle>
+                <CardDescription className="text-indigo-100 font-medium">FY 2024-25 (AY 2025-26)</CardDescription>
+              </div>
             </div>
-            <div>
-              <CardTitle className="text-2xl font-bold">Income Tax Calculator</CardTitle>
-              <CardDescription className="text-indigo-100">FY 2024-25 (Assessment Year 2025-26)</CardDescription>
+            <div className="flex bg-white/10 p-1 rounded-2xl backdrop-blur-sm">
+              {(["income", "deductions", "summary"] as const).map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={cn(
+                    "px-6 py-2 rounded-xl text-sm font-bold transition-all capitalize",
+                    activeTab === tab ? "bg-white text-indigo-600 shadow-lg" : "text-white hover:bg-white/10"
+                  )}
+                >
+                  {tab}
+                </button>
+              ))}
             </div>
           </div>
         </CardHeader>
-        <CardContent className="p-8 space-y-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <label className="text-sm font-bold text-gray-500 uppercase tracking-wider">Gross Annual Income (₹)</label>
-              <input 
-                type="number"
-                placeholder="e.g. 1200000"
-                value={income}
-                onChange={(e) => setIncome(e.target.value)}
-                className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:outline-none focus:border-indigo-600 transition-all font-medium text-lg"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-bold text-gray-500 uppercase tracking-wider">Deductions (80C, 80D, etc. - Old Regime Only) (₹)</label>
-              <input 
-                type="number"
-                placeholder="e.g. 150000"
-                value={deductions}
-                onChange={(e) => setDeductions(e.target.value)}
-                className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:outline-none focus:border-indigo-600 transition-all font-medium text-lg"
-              />
-            </div>
-          </div>
 
-          <Button 
-            onClick={calculateTax}
-            className="w-full h-16 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold text-xl shadow-lg transition-all active:scale-[0.98]"
-          >
-            Calculate Tax
-          </Button>
+        <CardContent className="p-8">
+          <AnimatePresence mode="wait">
+            {activeTab === "income" && (
+              <motion.div
+                key="income"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="grid grid-cols-1 md:grid-cols-2 gap-10"
+              >
+                <div className="space-y-8">
+                  <div className="space-y-4">
+                    <label className="text-sm font-bold text-gray-400 uppercase tracking-widest">Select Age Group</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {(["Below 60", "60 to 80", "Above 80"] as const).map(group => (
+                        <button
+                          key={group}
+                          onClick={() => setAgeGroup(group)}
+                          className={cn(
+                            "py-3 px-2 rounded-xl text-xs font-bold transition-all border-2",
+                            ageGroup === group 
+                              ? "bg-indigo-50 border-indigo-600 text-indigo-600" 
+                              : "border-gray-100 text-gray-500 hover:border-indigo-200"
+                          )}
+                        >
+                          {group}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
 
-          {results && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
-              {/* Old Regime Card */}
-              <div className="bg-gray-50 rounded-3xl p-6 border-2 border-gray-100 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-lg font-bold text-gray-900">Old Regime</h4>
-                  <span className="px-3 py-1 bg-gray-200 text-gray-600 rounded-full text-xs font-bold">Standard</span>
-                </div>
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Taxable Income</span>
-                    <span className="font-bold">₹{results.old.taxable.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Income Tax</span>
-                    <span className="font-bold">₹{results.old.tax.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Health & Edu Cess (4%)</span>
-                    <span className="font-bold">₹{results.old.cess.toLocaleString()}</span>
-                  </div>
-                  <div className="pt-4 border-t border-gray-200 flex justify-between items-center">
-                    <span className="font-bold text-gray-900">Total Tax</span>
-                    <span className="text-2xl font-black text-indigo-600">₹{results.old.total.toLocaleString()}</span>
+                  <div className="space-y-6">
+                    <InputField label="Gross Salary Income" value={income.salary} onChange={(v) => handleIncomeChange("salary", v)} icon={<UserIcon className="w-5 h-5" />} />
+                    <InputField label="Annual Rent Received" value={income.rent} onChange={(v) => handleIncomeChange("rent", v)} icon={<ImageIcon className="w-5 h-5" />} />
+                    <InputField label="Interest Income" value={income.interest} onChange={(v) => handleIncomeChange("interest", v)} icon={<Sparkles className="w-5 h-5" />} />
                   </div>
                 </div>
-              </div>
 
-              {/* New Regime Card */}
-              <div className="bg-indigo-50 rounded-3xl p-6 border-2 border-indigo-100 space-y-4 relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-2">
-                  <Sparkles className="w-6 h-6 text-indigo-200" />
-                </div>
-                <div className="flex items-center justify-between">
-                  <h4 className="text-lg font-bold text-indigo-900">New Regime</h4>
-                  <span className="px-3 py-1 bg-indigo-600 text-white rounded-full text-xs font-bold">Recommended</span>
-                </div>
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-indigo-600/60">Taxable Income</span>
-                    <span className="font-bold text-indigo-900">₹{results.new.taxable.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-indigo-600/60">Income Tax</span>
-                    <span className="font-bold text-indigo-900">₹{results.new.tax.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-indigo-600/60">Health & Edu Cess (4%)</span>
-                    <span className="font-bold text-indigo-900">₹{results.new.cess.toLocaleString()}</span>
-                  </div>
-                  <div className="pt-4 border-t border-indigo-200 flex justify-between items-center">
-                    <span className="font-bold text-indigo-900">Total Tax</span>
-                    <span className="text-2xl font-black text-indigo-600">₹{results.new.total.toLocaleString()}</span>
+                <div className="space-y-6">
+                  <InputField label="Income from Digital Assets" value={income.digitalAssets} onChange={(v) => handleIncomeChange("digitalAssets", v)} icon={<Globe className="w-5 h-5" />} />
+                  <InputField label="Other Income" value={income.other} onChange={(v) => handleIncomeChange("other", v)} icon={<MessageSquare className="w-5 h-5" />} />
+                  
+                  <div className="p-8 bg-indigo-50 rounded-3xl border-2 border-indigo-100 mt-4">
+                    <p className="text-indigo-600 font-bold uppercase tracking-widest text-xs mb-2">Total Gross Income</p>
+                    <p className="text-4xl font-black text-indigo-900">{formatCurrency(totalGrossIncome)}</p>
+                    <Button 
+                      onClick={() => setActiveTab("deductions")} 
+                      className="w-full mt-6 h-14 bg-indigo-600 hover:bg-indigo-700 rounded-2xl font-bold text-lg"
+                    >
+                      Next: Deductions <ArrowRightLeft className="w-5 h-5 ml-2" />
+                    </Button>
                   </div>
                 </div>
-                {results.new.total < results.old.total && (
-                  <div className="mt-4 p-3 bg-green-100 text-green-700 rounded-xl text-xs font-bold text-center">
-                    You save ₹{(results.old.total - results.new.total).toLocaleString()} with New Regime!
+              </motion.div>
+            )}
+
+            {activeTab === "deductions" && (
+              <motion.div
+                key="deductions"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="grid grid-cols-1 md:grid-cols-2 gap-10"
+              >
+                <div className="space-y-6">
+                  <InputField label="Section 80C (LIC, PPF, etc.)" value={deductions.section80C} onChange={(v) => handleDeductionChange("section80C", v)} max={150000} />
+                  <InputField label="Section 80D (Health Insurance)" value={deductions.section80D} onChange={(v) => handleDeductionChange("section80D", v)} />
+                  <InputField label="Section 80CCD(1B) (NPS)" value={deductions.nps} onChange={(v) => handleDeductionChange("nps", v)} max={50000} />
+                </div>
+                <div className="space-y-6">
+                  <InputField label="Home Loan Interest (Sec 24)" value={deductions.homeLoanInterest} onChange={(v) => handleDeductionChange("homeLoanInterest", v)} />
+                  <InputField label="Section 80TTA (Savings Interest)" value={deductions.section80TTA} onChange={(v) => handleDeductionChange("section80TTA", v)} max={10000} />
+                  <InputField label="Other Deductions" value={deductions.others} onChange={(v) => handleDeductionChange("others", v)} />
+                </div>
+                <div className="md:col-span-2 flex justify-between gap-4">
+                  <Button variant="outline" onClick={() => setActiveTab("income")} className="h-14 px-8 border-2 rounded-2xl font-bold">Back</Button>
+                  <Button onClick={() => setActiveTab("summary")} className="h-14 px-10 bg-indigo-600 hover:bg-indigo-700 rounded-2xl font-bold">Show Summary</Button>
+                </div>
+              </motion.div>
+            )}
+
+            {activeTab === "summary" && (
+              <motion.div
+                key="summary"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="space-y-10"
+              >
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  <SummaryCard title="Old Regime" amount={oldTotalTax} taxable={oldTaxableIncome} color="bg-slate-100" textColor="text-slate-900" deductions={oldTotalDeductions} />
+                  <SummaryCard title="New Regime" amount={newTotalTax} taxable={newTaxableIncome} color="bg-indigo-600" textColor="text-white" deductions={newTotalDeductions} isRecommended={newTotalTax <= oldTotalTax} />
+                  
+                  <div className="bg-amber-50 border-2 border-amber-200 rounded-3xl p-8 flex flex-col justify-center text-center">
+                    <Sparkles className="w-10 h-10 text-amber-500 mx-auto mb-4" />
+                    <h4 className="text-xl font-black text-amber-900">Recommendation</h4>
+                    <p className="text-amber-800 font-medium mt-2">You should choose the <span className="font-bold underline">{getCheaperRegime()}</span> to save approximately</p>
+                    <p className="text-3xl font-black text-amber-600 mt-4">{formatCurrency(Math.abs(oldTotalTax - newTotalTax))}</p>
                   </div>
-                )}
-                {results.old.total < results.new.total && (
-                  <div className="mt-4 p-3 bg-green-100 text-green-700 rounded-xl text-xs font-bold text-center">
-                    You save ₹{(results.new.total - results.old.total).toLocaleString()} with Old Regime!
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-10 bg-gray-50 rounded-3xl p-10 items-center">
+                  <div className="h-[300px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={[
+                            { name: 'Old Regime Tax', value: Number(oldTotalTax) },
+                            { name: 'New Regime Tax', value: Number(newTotalTax) }
+                          ]}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={60}
+                          outerRadius={100}
+                          paddingAngle={10}
+                          dataKey="value"
+                        >
+                          <Cell key="old" fill="#94a3b8" />
+                          <Cell key="new" fill="#4f46e5" />
+                        </Pie>
+                        <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                        <Legend verticalAlign="bottom" height={36}/>
+                      </PieChart>
+                    </ResponsiveContainer>
                   </div>
-                )}
-              </div>
-            </div>
-          )}
+                  <div className="space-y-6">
+                    <h3 className="text-2xl font-black text-gray-900">Tax Comparison Visualization</h3>
+                    <p className="text-gray-500 leading-relaxed font-medium">The chart illustrates the difference in tax liability between the two regimes based on your inputs and eligible deductions. The New Regime is often better for those with minimal investments, while the Old Regime benefits those with significant tax-saving declarations.</p>
+                    <div className="flex gap-4">
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded-full bg-slate-400" />
+                        <span className="text-sm font-bold text-gray-600">Old Regime ({formatCurrency(oldTotalTax)})</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded-full bg-indigo-600" />
+                        <span className="text-sm font-bold text-gray-600">New Regime ({formatCurrency(newTotalTax)})</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </CardContent>
-        <CardFooter className="bg-gray-50 p-6 text-xs text-gray-400 text-center">
-          * This is an estimate based on standard rates for FY 2024-25. Please consult a tax professional for accurate filing.
-        </CardFooter>
       </Card>
+    </div>
+  );
+}
+
+function InputField({ label, value, onChange, max, icon }: { label: string, value: number, onChange: (v: string) => void, max?: number, icon?: React.ReactNode }) {
+  return (
+    <div className="space-y-2 group">
+      <div className="flex justify-between items-center">
+        <label className="text-xs font-black text-gray-500 uppercase tracking-widest transition-colors group-focus-within:text-indigo-600">{label}</label>
+        {max && <span className="text-[10px] font-bold text-gray-400 bg-gray-100 px-2 py-1 rounded-full">Max: {new Intl.NumberFormat('en-IN').format(max)}</span>}
+      </div>
+      <div className="relative">
+        {icon && <div className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-600 transition-all">{icon}</div>}
+        <input 
+          type="number"
+          placeholder="0"
+          value={value || ""}
+          onChange={(e) => onChange(e.target.value)}
+          className={cn(
+            "w-full p-4 pl-14 bg-white border-2 border-gray-100 rounded-2xl focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-600/5 transition-all font-bold text-lg",
+            !icon && "pl-6"
+          )}
+        />
+      </div>
+    </div>
+  );
+}
+
+function SummaryCard({ title, amount, taxable, color, textColor, deductions, isRecommended }: { title: string, amount: number, taxable: number, color: string, textColor: string, deductions: number, isRecommended?: boolean }) {
+  const formatCurrency = (val: number) => {
+    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(val);
+  };
+
+  return (
+    <div className={cn("relative p-8 rounded-3xl transition-all hover:scale-[1.02]", color, textColor)}>
+      {isRecommended && (
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-green-500 text-white px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter shadow-lg flex items-center gap-1 animate-pulse">
+          <CheckCircle2 className="w-3 h-3" /> Best Choice
+        </div>
+      )}
+      <h3 className="text-lg font-bold opacity-80 uppercase tracking-widest">{title}</h3>
+      <p className="text-4xl font-black mt-2">{formatCurrency(amount)}</p>
+      <div className="mt-8 pt-8 border-t border-black/10 space-y-3">
+        <div className="flex justify-between text-sm opacity-80 font-bold">
+          <span>Gross Income</span>
+          <span>{formatCurrency(taxable + deductions)}</span>
+        </div>
+        <div className="flex justify-between text-sm opacity-80 font-bold">
+          <span>Deductions</span>
+          <span className="text-red-400">-{formatCurrency(deductions)}</span>
+        </div>
+        <div className="flex justify-between text-sm font-black border-t border-black/5 pt-3">
+          <span>Taxable Income</span>
+          <span>{formatCurrency(taxable)}</span>
+        </div>
+      </div>
     </div>
   );
 }
