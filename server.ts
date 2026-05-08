@@ -15,6 +15,7 @@ import JSZip from "jszip";
 import WordExtractor from "word-extractor";
 import { createRequire } from "module";
 import dotenv from "dotenv";
+import { GoogleGenAI } from "@google/genai";
 
 dotenv.config();
 
@@ -31,10 +32,68 @@ const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT || 3000;
 
   app.use(cors());
   app.use(express.json());
+
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+
+  // AI Proxy Route
+  app.post("/api/ai", async (req, res) => {
+    try {
+      const { toolId, input, sourceLang, targetLang } = req.body;
+      
+      if (!process.env.GEMINI_API_KEY) {
+        return res.status(500).json({ error: "Gemini API key is not configured on the server." });
+      }
+
+      if (toolId === "image-gen") {
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash-image',
+          contents: { parts: [{ text: input }] },
+        });
+        
+        let imageData = null;
+        for (const part of response.candidates?.[0]?.content?.parts || []) {
+          if (part.inlineData) {
+            imageData = `data:image/png;base64,${part.inlineData.data}`;
+            break;
+          }
+        }
+        return res.json({ type: "image", data: imageData });
+      } 
+      
+      if (toolId === "train-status" || toolId === "search-gpt") {
+        const response = await ai.models.generateContent({
+          model: "gemini-3.1-pro-preview",
+          contents: toolId === "train-status" 
+            ? `Find the current real-time status of train: ${input}. Provide details like current station, delay, and expected arrival.`
+            : input,
+          config: {
+            tools: [{ googleSearch: {} }],
+          },
+        });
+        return res.json({ type: "text", data: response.text });
+      }
+
+      // Content Gen or Translator
+      const systemPrompt = toolId === "translator" 
+        ? `You are a world-class polyglot and professional translator. Your task is to translate the provided text from ${sourceLang} to ${targetLang}. Maintain the original tone, nuances, and context. Output ONLY the translated text without any explanations.`
+        : "You are a creative content generator. Generate high-quality content based on the user's request.";
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.1-pro-preview",
+        contents: input,
+        config: { systemInstruction: systemPrompt }
+      });
+      return res.json({ type: "text", data: response.text });
+
+    } catch (error: any) {
+      console.error("Server AI Error:", error);
+      res.status(500).json({ error: error.message || "AI processing failed" });
+    }
+  });
 
   // Configure multer for file uploads
   const upload = multer({

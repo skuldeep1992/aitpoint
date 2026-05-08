@@ -415,44 +415,22 @@ export default function App() {
     setAiOutput(null);
 
     try {
-      const apiKey = process.env.GEMINI_API_KEY;
-      
-      if (!apiKey || apiKey === "MY_GEMINI_API_KEY") {
-        // If the key is missing or is the placeholder from .env.example
-        if (typeof (window as any).aistudio !== 'undefined') {
-          if (!(await (window as any).aistudio.hasSelectedApiKey())) {
-            toast.info("Please select an API key to use AI features.");
-            await (window as any).aistudio.openSelectKey();
-            setIsAiLoading(false);
-            return;
-          }
-        } else {
-          throw new Error("Gemini API key is missing. Please configure it in the AI Studio Secrets panel.");
-        }
-      }
-
-      const ai = new GoogleGenAI({ apiKey: apiKey || "" });
-      
-      if (toolId === "image-gen") {
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash-image',
-          contents: { parts: [{ text: input }] },
-        });
-        
-        for (const part of response.candidates?.[0]?.content?.parts || []) {
-          if (part.inlineData) {
-            setAiOutput({ type: "image", data: `data:image/png;base64,${part.inlineData.data}` });
-            break;
+      if (toolId === "video-gen") {
+        // Video generation is still client-side for now due to signed URI complexity
+        const apiKey = process.env.GEMINI_API_KEY;
+        if (!apiKey || apiKey === "MY_GEMINI_API_KEY") {
+          if (typeof (window as any).aistudio !== 'undefined') {
+            if (!(await (window as any).aistudio.hasSelectedApiKey())) {
+              toast.info("Please select an API key to use AI features.");
+              await (window as any).aistudio.openSelectKey();
+              setIsAiLoading(false);
+              return;
+            }
+          } else {
+            throw new Error("Gemini API key is missing. Please configure it in the AI Studio Secrets panel.");
           }
         }
-      } else if (toolId === "video-gen") {
-        // Check for API key selection for Veo
-        if (!(await (window as any).aistudio.hasSelectedApiKey())) {
-          await (window as any).aistudio.openSelectKey();
-          setIsAiLoading(false);
-          return;
-        }
-
+        const ai = new GoogleGenAI({ apiKey: apiKey || "" });
         const operation = await ai.models.generateVideos({
           model: 'veo-3.1-lite-generate-preview',
           prompt: input,
@@ -477,36 +455,33 @@ export default function App() {
           const blob = await videoResponse.blob();
           setAiOutput({ type: "video", data: URL.createObjectURL(blob) });
         }
-      } else if (toolId === "train-status" || toolId === "search-gpt") {
-        const response = await ai.models.generateContent({
-          model: "gemini-3.1-pro-preview",
-          contents: toolId === "train-status" 
-            ? `Find the current real-time status of train: ${input}. Provide details like current station, delay, and expected arrival.`
-            : input,
-          config: {
-            tools: [{ googleSearch: {} }],
-          },
-        });
-        setAiOutput({ type: "text", data: response.text });
       } else {
-        // Content Gen or Translator
-        const systemPrompt = toolId === "translator" 
-          ? `You are a world-class polyglot and professional translator. Your task is to translate the provided text from ${sourceLang} to ${targetLang}. Maintain the original tone, nuances, and context. Output ONLY the translated text without any explanations.`
-          : "You are a creative content generator. Generate high-quality content based on the user's request.";
-
-        const response = await ai.models.generateContent({
-          model: "gemini-3.1-pro-preview",
-          contents: input,
-          config: { systemInstruction: systemPrompt }
+        // Use server-side proxy for other AI tools
+        const response = await fetch("/api/ai", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            toolId, 
+            input, 
+            sourceLang, 
+            targetLang 
+          }),
         });
-        setAiOutput({ type: "text", data: response.text });
+
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({ error: "AI request failed" }));
+          throw new Error(err.error || "AI request failed");
+        }
+
+        const data = await response.json();
+        setAiOutput(data);
       }
     } catch (error: any) {
       console.error("AI Error:", error);
       let errorMessage = error.message || "AI processing failed";
       
       if (errorMessage.includes("API key not valid") || errorMessage.includes("API_KEY_INVALID")) {
-        errorMessage = "The Gemini API key is invalid. Please check your AI Studio Secrets or select a new key.";
+        errorMessage = "The Gemini API key is invalid. Please check your production environment variables.";
         if (typeof (window as any).aistudio !== 'undefined') {
           (window as any).aistudio.openSelectKey();
         }

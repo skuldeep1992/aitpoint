@@ -1,132 +1,62 @@
 # Deployment Guide for AiTpoint
 
-This guide explains how to host AiTpoint on your own server.
+This guide explains how to host AiTpoint on a live domain.
 
-## Prerequisites
+## Recommended: Cloud Run (with GitHub)
 
-- **Node.js**: Version 18 or higher.
-- **npm** or **yarn**: Package manager.
-- **Linux Server**: (Recommended) Ubuntu 22.04 or similar.
+The easiest way to take this app live is via **Google Cloud Run**, especially if you want a custom domain.
 
-## 1. Get the Code
+1.  **Push to GitHub**:
+    -   Export your project to GitHub from the AI Studio menu (**Settings > Export to GitHub**).
+2.  **Deploy to Cloud Run**:
+    -   Go to the [Google Cloud Console](https://console.cloud.google.com/run).
+    -   Click **Create Service**.
+    -   Select **Continuously deploy from a repository**.
+    -   Select your GitHub repo and the `main` branch.
+    -   In the build settings, choose **Docker** (it will automatically use the `Dockerfile` I created).
+3.  **Setup Custom Domain**:
+    -   Once deployed, go to the **Manage Custom Domains** tab in the Cloud Run service settings.
+    -   Follow the steps to map your domain (e.g., `aitpoint.com`) to the service.
 
-Export your project from AI Studio as a ZIP file or push it to a GitHub repository.
+## Option 2: Self-Hosting (Linux VPS)
 
-## 2. Install System Dependencies (Linux)
+If you have your own server (DigitalOcean, AWS EC2, etc.):
 
-Puppeteer requires several system libraries to run Chromium. On Ubuntu/Debian, run:
+### 1. Prerequisites
+- **Node.js**: Version 20 or higher.
+- **Docker**: (Recommended) For easy setup of Puppeteer dependencies.
 
+### 2. Using Docker (Easiest)
+```bash
+# Build the image
+docker build -t aitpoint .
+
+# Run the container
+docker run -p 3000:3000 --env-file .env aitpoint
+```
+
+### 3. Without Docker (Manual Setup)
+If you don't want to use Docker, you must install the system libraries for Puppeteer:
 ```bash
 sudo apt-get update
-sudo apt-get install -y \
-    ca-certificates \
-    fonts-liberation \
-    libasound2 \
-    libatk-bridge2.0-0 \
-    libatk1.0-0 \
-    libc6 \
-    libcairo2 \
-    libcups2 \
-    libdbus-1-3 \
-    libexpat1 \
-    libfontconfig1 \
-    libgbm1 \
-    libgcc1 \
-    libglib2.0-0 \
-    libgtk-3-0 \
-    libnspr4 \
-    libnss3 \
-    libpango-1.0-0 \
-    libpangocairo-1.0-0 \
-    libstdc++6 \
-    libx11-6 \
-    libx11-xcb1 \
-    libxcb1 \
-    libxcomposite1 \
-    libxcursor1 \
-    libxdamage1 \
-    libxext6 \
-    libxfixes3 \
-    libxi6 \
-    libxrandr2 \
-    libxrender1 \
-    libxss1 \
-    libxtst6 \
-    lsb-release \
-    wget \
-    xdg-utils
+sudo apt-get install -y ca-certificates fonts-liberation libasound2 libatk-bridge2.0-0 ... (see Dockerfile for full list)
 ```
-
-## 3. Setup the Project
-
-1.  **Extract/Clone** the code to your server.
-2.  **Install dependencies**:
-    ```bash
-    npm install
-    ```
-3.  **Build the frontend**:
-    ```bash
-    npm run build
-    ```
-
-## 4. Environment Variables
-
-Create a `.env` file in the root directory:
-
-```env
-NODE_ENV=production
-PORT=3000
-```
-
-## 5. Running the Application
-
-### Option A: Direct (For testing)
+Then:
 ```bash
+npm install
+npm run build
 npm start
 ```
 
-### Option B: Using PM2 (Recommended for Production)
-PM2 keeps your app running in the background and restarts it if it crashes.
+## Option 3: Vercel / Netlify
+*Note: Because this app uses a custom Express server (`server.ts`) and Puppeteer, Vercel requires specific configuration for "Serverless Functions". Cloud Run is generally more reliable for this specific architecture.*
 
-1.  **Install PM2**:
-    ```bash
-    sudo npm install -g pm2
-    ```
-2.  **Start the app**:
-    ```bash
-    pm2 start server.ts --interpreter ./node_modules/.bin/tsx --name documorph
-    ```
-    *Note: Since we use `server.ts` directly with `tsx`, we tell PM2 to use the local `tsx` interpreter.*
+## Environment Variables
+Ensure you set these in your production environment:
+- `GEMINI_API_KEY`: Your Google AI API Key.
+- `INDIAN_RAIL_API_KEY`: For the train status feature.
+- `NODE_ENV`: `production`
 
-3.  **Save the process list**:
-    ```bash
-    pm2 save
-    ```
-
-## 6. Reverse Proxy (Nginx)
-
-It is recommended to use Nginx as a reverse proxy to handle SSL and port 80/443.
-
-Example Nginx config (`/etc/nginx/sites-available/documorph`):
-
-```nginx
-server {
-    listen 80;
-    server_name yourdomain.com;
-
-    location / {
-        proxy_pass http://localhost:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
-        client_max_body_size 50M;
-    }
-}
-```
-
-## Important Notes
-
-- **Max File Size**: The current limit is 50MB. If you change this in `server.ts`, also update your Nginx `client_max_body_size`.
-- **Puppeteer Performance**: Puppeteer launches a new browser instance for each conversion. Ensure your server has at least 2GB of RAM for stable performance.
+## SSL and Security
+- Cloud Run handles SSL (HTTPS) automatically for you.
+- If self-hosting, use **Nginx** with **Certbot** (Let's Encrypt) to secure your domain.
