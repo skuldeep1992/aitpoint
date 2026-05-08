@@ -212,6 +212,20 @@ const UTILITY_TOOLS = [
     description: "Calculate tax for Old & New regimes (FY 2024-25)",
     icon: Calculator,
     color: "bg-indigo-600"
+  },
+  {
+    id: "unit-converter",
+    label: "Unit Converter",
+    description: "Convert between Length, Weight, Temp & more",
+    icon: ArrowRightLeft,
+    color: "bg-teal-600"
+  },
+  {
+    id: "password-gen",
+    label: "Password Generator",
+    description: "Generate secure, random passwords locally",
+    icon: Lock,
+    color: "bg-slate-700"
   }
 ];
 
@@ -415,76 +429,31 @@ export default function App() {
     setAiOutput(null);
 
     try {
-      if (toolId === "video-gen") {
-        // Video generation is still client-side for now due to signed URI complexity
-        const apiKey = process.env.GEMINI_API_KEY;
-        if (!apiKey || apiKey === "MY_GEMINI_API_KEY") {
-          if (typeof (window as any).aistudio !== 'undefined') {
-            if (!(await (window as any).aistudio.hasSelectedApiKey())) {
-              toast.info("Please select an API key to use AI features.");
-              await (window as any).aistudio.openSelectKey();
-              setIsAiLoading(false);
-              return;
-            }
-          } else {
-            throw new Error("Gemini API key is missing. Please configure it in the AI Studio Secrets panel.");
-          }
-        }
-        const ai = new GoogleGenAI({ apiKey: apiKey || "" });
-        const operation = await ai.models.generateVideos({
-          model: 'veo-3.1-lite-generate-preview',
-          prompt: input,
-          config: {
-            numberOfVideos: 1,
-            resolution: '720p',
-            aspectRatio: '16:9'
-          }
-        });
+      // All AI tools now proxied through the server
+      const response = await fetch("/api/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          toolId, 
+          input, 
+          sourceLang, 
+          targetLang 
+        }),
+      });
 
-        let currentOp = operation;
-        while (!currentOp.done) {
-          await new Promise(resolve => setTimeout(resolve, 5000));
-          currentOp = await ai.operations.getVideosOperation({ operation: currentOp });
-        }
-
-        const videoUri = currentOp.response?.generatedVideos?.[0]?.video?.uri;
-        if (videoUri) {
-          const videoResponse = await fetch(videoUri, {
-            headers: { 'x-goog-api-key': process.env.GEMINI_API_KEY! }
-          });
-          const blob = await videoResponse.blob();
-          setAiOutput({ type: "video", data: URL.createObjectURL(blob) });
-        }
-      } else {
-        // Use server-side proxy for other AI tools
-        const response = await fetch("/api/ai", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
-            toolId, 
-            input, 
-            sourceLang, 
-            targetLang 
-          }),
-        });
-
-        if (!response.ok) {
-          const err = await response.json().catch(() => ({ error: "AI request failed" }));
-          throw new Error(err.error || "AI request failed");
-        }
-
-        const data = await response.json();
-        setAiOutput(data);
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: "AI request failed" }));
+        throw new Error(err.error || "AI request failed");
       }
+
+      const data = await response.json();
+      setAiOutput(data);
     } catch (error: any) {
       console.error("AI Error:", error);
       let errorMessage = error.message || "AI processing failed";
       
       if (errorMessage.includes("API key not valid") || errorMessage.includes("API_KEY_INVALID")) {
-        errorMessage = "The Gemini API key is invalid. Please check your production environment variables.";
-        if (typeof (window as any).aistudio !== 'undefined') {
-          (window as any).aistudio.openSelectKey();
-        }
+        errorMessage = "The server's Gemini API key is missing or invalid. Please check the server configuration.";
       }
       
       toast.error(errorMessage);
@@ -665,6 +634,8 @@ export default function App() {
             <Route path="/ai/train-status" element={<TrainStatusView handleAiAction={handleAiAction} isAiLoading={isAiLoading} aiOutput={aiOutput} setAiOutput={setAiOutput} />} />
             <Route path="/ai/:toolId" element={<AiToolView aiInput={aiInput} setAiInput={setAiInput} aiOutput={aiOutput} setAiOutput={setAiOutput} isAiLoading={isAiLoading} handleAiAction={handleAiAction} sourceLang={sourceLang} setSourceLang={setSourceLang} targetLang={targetLang} setTargetLang={setTargetLang} />} />
             <Route path="/tools/tax-calculator" element={<TaxCalculatorView />} />
+            <Route path="/tools/unit-converter" element={<UnitConverterView />} />
+            <Route path="/tools/password-gen" element={<PasswordGeneratorView />} />
           </Routes>
 
           <footer className="text-center text-gray-400 text-xs pt-8 font-light">
@@ -1495,6 +1466,146 @@ function TrainStatusView({ handleAiAction, isAiLoading, aiOutput, setAiOutput }:
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function UnitConverterView() {
+  const [value, setValue] = useState<string>("1");
+  const [type, setType] = useState<"length" | "weight" | "temp">("length");
+  const [from, setFrom] = useState("Meter");
+  const [to, setTo] = useState("Foot");
+  const [result, setResult] = useState<number | null>(null);
+
+  const units = {
+    length: {
+      Meter: 1,
+      Foot: 3.28084,
+      Inch: 39.3701,
+      Kilometer: 0.001,
+      Mile: 0.000621371,
+      Centimeter: 100
+    },
+    weight: {
+      Kilogram: 1,
+      Pound: 2.20462,
+      Gram: 1000,
+      Ounce: 35.274,
+      MetricTon: 0.001
+    }
+  };
+
+  const handleConvert = () => {
+    const val = parseFloat(value);
+    if (isNaN(val)) return;
+
+    if (type === "temp") {
+      let celsius = val;
+      if (from === "Fahrenheit") celsius = (val - 32) * 5/9;
+      if (from === "Kelvin") celsius = val - 273.15;
+
+      let res = celsius;
+      if (to === "Fahrenheit") res = (celsius * 9/5) + 32;
+      if (to === "Kelvin") res = celsius + 273.15;
+      setResult(res);
+    } else {
+      const fromRate = (units[type] as any)[from];
+      const toRate = (units[type] as any)[to];
+      setResult((val / fromRate) * toRate);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <Link to="/" className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-teal-600">
+        <ArrowRightLeft className="w-4 h-4" />
+        Back to Home
+      </Link>
+      <Card className="rounded-3xl border-none shadow-xl overflow-hidden bg-white">
+        <CardHeader className="bg-teal-600 text-white">
+          <CardTitle>Unit Converter</CardTitle>
+          <CardDescription className="text-teal-100">Simple and precise conversions</CardDescription>
+        </CardHeader>
+        <CardContent className="p-8 space-y-6">
+          <div className="flex gap-2">
+            {(["length", "weight", "temp"] as const).map(t => (
+              <Button key={t} variant={type === t ? "default" : "outline"} onClick={() => { setType(t); setFrom(t === "temp" ? "Celsius" : Object.keys(units[t])[0]); setTo(t === "temp" ? "Fahrenheit" : Object.keys(units[t])[1]); }} className="capitalize rounded-xl">{t}</Button>
+            ))}
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <input type="number" value={value} onChange={e => setValue(e.target.value)} className="p-4 bg-gray-50 border rounded-2xl" placeholder="Value" />
+            <select value={from} onChange={e => setFrom(e.target.value)} className="p-4 bg-gray-50 border rounded-2xl">
+              {type === "temp" ? ["Celsius", "Fahrenheit", "Kelvin"].map(u => <option key={u}>{u}</option>) : Object.keys(units[type]).map(u => <option key={u}>{u}</option>)}
+            </select>
+            <select value={to} onChange={e => setTo(e.target.value)} className="p-4 bg-gray-50 border rounded-2xl">
+              {type === "temp" ? ["Celsius", "Fahrenheit", "Kelvin"].map(u => <option key={u}>{u}</option>) : Object.keys(units[type]).map(u => <option key={u}>{u}</option>)}
+            </select>
+          </div>
+          <Button onClick={handleConvert} className="w-full h-14 bg-teal-600 hover:bg-teal-700 rounded-2xl font-bold">Convert Now</Button>
+          {result !== null && (
+            <div className="p-6 bg-teal-50 rounded-2xl text-center">
+              <p className="text-sm font-bold text-teal-600 uppercase">Result</p>
+              <p className="text-4xl font-black text-teal-900">{result.toLocaleString(undefined, { maximumFractionDigits: 4 })} {to}</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function PasswordGeneratorView() {
+  const [length, setLength] = useState(16);
+  const [includeNumbers, setIncludeNumbers] = useState(true);
+  const [includeSymbols, setIncludeSymbols] = useState(true);
+  const [password, setPassword] = useState("");
+
+  const generate = () => {
+    const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const nums = "0123456789";
+    const symbols = "!@#$%^&*()_+~`|}{[]:;?><,./-=";
+    let pool = chars;
+    if (includeNumbers) pool += nums;
+    if (includeSymbols) pool += symbols;
+    
+    let res = "";
+    for (let i = 0; i < length; i++) {
+      res += pool.charAt(Math.floor(Math.random() * pool.length));
+    }
+    setPassword(res);
+  };
+
+  return (
+    <div className="space-y-6">
+      <Link to="/" className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-slate-700">
+        <ArrowRightLeft className="w-4 h-4" />
+        Back to Home
+      </Link>
+      <Card className="rounded-3xl border-none shadow-xl overflow-hidden bg-white">
+        <CardHeader className="bg-slate-700 text-white">
+          <CardTitle>Password Generator</CardTitle>
+          <CardDescription className="text-slate-300">Generate secure passwords locally in your browser</CardDescription>
+        </CardHeader>
+        <CardContent className="p-8 space-y-6">
+          <div className="space-y-4">
+            <div className="flex justify-between font-bold"><span>Length: {length}</span></div>
+            <input type="range" min="8" max="64" value={length} onChange={e => setLength(parseInt(e.target.value))} className="w-full accent-slate-700" />
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={includeNumbers} onChange={e => setIncludeNumbers(e.target.checked)} className="w-5 h-5 accent-slate-700" /> Numbers</label>
+              <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={includeSymbols} onChange={e => setIncludeSymbols(e.target.checked)} className="w-5 h-5 accent-slate-700" /> Symbols</label>
+            </div>
+          </div>
+          <Button onClick={generate} className="w-full h-14 bg-slate-700 hover:bg-slate-800 rounded-2xl font-bold">Generate Password</Button>
+          {password && (
+            <div className="p-6 bg-slate-50 rounded-2xl">
+              <div className="flex items-center justify-between gap-4">
+                <code className="text-lg font-mono break-all text-slate-900 bg-white p-3 rounded-lg flex-1 border">{password}</code>
+                <Button variant="outline" onClick={() => { navigator.clipboard.writeText(password); toast.success("Copied to clipboard!"); }} className="rounded-xl">Copy</Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

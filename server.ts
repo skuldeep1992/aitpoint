@@ -48,6 +48,35 @@ async function startServer() {
         return res.status(500).json({ error: "Gemini API key is not configured on the server." });
       }
 
+      if (toolId === "video-gen") {
+        const operation = await ai.models.generateVideos({
+          model: 'veo-3.1-lite-generate-preview',
+          prompt: input,
+          config: {
+            numberOfVideos: 1,
+            resolution: '720p',
+            aspectRatio: '16:9'
+          }
+        });
+
+        let currentOp = operation;
+        while (!currentOp.done) {
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          currentOp = await ai.operations.getVideosOperation({ operation: currentOp });
+        }
+
+        const videoUri = currentOp.response?.generatedVideos?.[0]?.video?.uri;
+        if (videoUri) {
+          const videoResponse = await fetch(videoUri, {
+            headers: { 'x-goog-api-key': process.env.GEMINI_API_KEY! }
+          });
+          const blob = await videoResponse.blob();
+          const buffer = await blob.arrayBuffer();
+          const base64 = Buffer.from(buffer).toString('base64');
+          return res.json({ type: "video", data: `data:video/mp4;base64,${base64}` });
+        }
+      }
+
       if (toolId === "image-gen") {
         const response = await ai.models.generateContent({
           model: 'gemini-2.5-flash-image',
@@ -110,7 +139,10 @@ async function startServer() {
       const apiKey = process.env.INDIAN_RAIL_API_KEY;
       
       if (!apiKey) {
-        return res.status(500).json({ error: "Indian Rail API key is not configured." });
+        return res.status(200).json({ 
+          error: "API Key Missing", 
+          Message: "Real-time Train API is not configured on this server. Please setup INDIAN_RAIL_API_KEY in the environment." 
+        });
       }
 
       const apiUrl = `http://indianrailapi.com/api/v2/livetrainstatus/apikey/${apiKey}/trainnumber/${trainNo}/date/${date}/`;
