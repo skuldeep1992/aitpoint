@@ -18,34 +18,39 @@ The easiest way to take this app live is via **Google Cloud Run**, especially if
     -   Once deployed, go to the **Manage Custom Domains** tab in the Cloud Run service settings.
     -   Follow the steps to map your domain (e.g., `aitpoint.com`) to the service.
 
-## Option 2: Self-Hosting (Linux VPS)
+## Option 2: Self-Hosting (Hostinger VPS / Linux)
 
-If you have your own server (DigitalOcean, AWS EC2, etc.):
+If you are using a **Hostinger VPS** (or any Ubuntu server):
 
 ### 1. Prerequisites
-- **Node.js**: Version 20 or higher.
-- **Docker**: (Recommended) For easy setup of Puppeteer dependencies.
+- **Plan:** Ensure you have a **VPS** plan (Shared hosting is not recommended for this app).
+- **OS:** Ubuntu 22.04 or 24.04 is recommended.
 
-### 2. Using Docker (Easiest)
+### 2. Automatic Setup (Easiest)
+We've included a script to install Node.js and all Chrome dependencies for you:
+
 ```bash
-# Build the image
+# 1. Upload the code to your server
+# 2. Run the setup script
+chmod +x hostinger-setup.sh
+./hostinger-setup.sh
+```
+
+### 3. Manual Deployment
+If the script doesn't fit your needs, follow these steps:
+1.  **Install dependencies**: `npm install`
+2.  **Build the app**: `npm run build`
+3.  **Setup Environment**: Create a `.env` file with your `GEMINI_API_KEY`.
+4.  **Start with PM2**:
+    ```bash
+    pm2 start npm --name aitpoint -- start
+    ```
+
+## Option 3: Docker (Recommended for VPS)
+If your VPS has Docker installed, use it to avoid installing manual dependencies:
+```bash
 docker build -t aitpoint .
-
-# Run the container
-docker run -p 3000:3000 --env-file .env aitpoint
-```
-
-### 3. Without Docker (Manual Setup)
-If you don't want to use Docker, you must install the system libraries for Puppeteer:
-```bash
-sudo apt-get update
-sudo apt-get install -y ca-certificates fonts-liberation libasound2 libatk-bridge2.0-0 ... (see Dockerfile for full list)
-```
-Then:
-```bash
-npm install
-npm run build
-npm start
+docker run -d -p 80:3000 --restart always --env-file .env aitpoint
 ```
 
 ## Option 3: Vercel / Netlify
